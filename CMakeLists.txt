@@ -51,6 +51,9 @@ target_sources(${LIBNAME}
     src/register_types.h
     src/example_class.cpp
     src/example_class.h
+    src/math/vector4d.cpp
+    src/math/vector4d.h
+    src/math/math_defs_4d.h
 )
 
 # Fetch a list of the xml files to use for documentation and add to our target
