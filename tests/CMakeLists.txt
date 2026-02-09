@@ -28,6 +28,10 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
 set(SRC_SOURCES
     ${SRC_DIR}/math/vector4d.cpp
+    ${SRC_DIR}/math/basis4d.cpp
+    ${SRC_DIR}/math/transform4d.cpp
+    ${SRC_DIR}/math/aabb4d.cpp
+    ${SRC_DIR}/math/rotor4d.cpp
 )
 
 # --- Test sources ------------------------------------------------------------
@@ -38,10 +42,10 @@ set(TEST_SOURCES test_main.cpp)
 # Stage 1 — Math4D
 list(APPEND TEST_SOURCES
     math/test_vector4d.cpp
-    # math/test_basis4d.cpp
-    # math/test_transform4d.cpp
-    # math/test_aabb4d.cpp
-    # math/test_rotor4d.cpp
+    math/test_basis4d.cpp
+    math/test_transform4d.cpp
+    math/test_aabb4d.cpp
+    math/test_rotor4d.cpp
 )
 
 # Stage 2 — Shapes
