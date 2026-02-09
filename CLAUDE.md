@@ -130,15 +130,46 @@ CMake is available as an alternative (`CMakeLists.txt`).
 
 ## Current State
 
-The repository is scaffolded from the godot-cpp template. Only the placeholder
-`ExampleClass` exists. Physics implementation has not started yet.
+Stage 1 (Math4D) is **in progress**. The following classes are implemented and passing tests:
+
+| Class | Header | Status | Tests |
+|---|---|---|---|
+| `Vector4D` | `src/math/vector4d.h/.cpp` | **Done** | 32 tests, 104 assertions passing |
+| `Basis4D` | `src/math/basis4d.h/.cpp` | **Done** | 7 tests passing (identity, rotation, multiplication, inverse, determinant) |
+| `Transform4D` | `src/math/transform4d.h/.cpp` | **Done** | 7 tests passing (identity, translation, composition, inverse) |
+| `AABB4D` | `src/math/aabb4d.h/.cpp` | **Done** | 9 tests passing (containment, intersection, merge, grow, volume) |
+| `Rotor4D` | `src/math/rotor4d.h/.cpp` | **WIP** | `to_basis()` conversion produces incorrect matrix; 6 of 9 tests failing. The geometric product, conjugate, norm, slerp, and from_plane_angle are implemented but the sandwich-product rotation (via `to_basis()`) has sign/coefficient errors that need debugging. |
+| `Hyperplane4D` | `src/math/hyperplane4d.h/.cpp` | **Not started** | — |
+| `math_defs_4d.h` | `src/math/math_defs_4d.h` | **Done** | Provides conditional includes for godot-cpp vs test compat shim |
+
+### Known Issues
+
+- **Rotor4D `to_basis()` bug**: The matrix produced by `to_basis()` for an XY-plane
+  90-degree rotor (s=0.707, e12=-0.707) gives `[[1,-1,0,0],[1,0,0,0],...]` instead
+  of the expected `[[0,-1,0,0],[1,0,0,0],...]`. The diagonal elements are wrong,
+  suggesting the squared-term formula in `to_basis()` needs rederivation. The
+  `rotate()` method delegates to `to_basis()`, so all rotation tests fail.
+
+### What's Left for Stage 1
+
+1. Fix `Rotor4D::to_basis()` — rederive the 4x4 matrix from the sandwich product
+2. Implement `Hyperplane4D` (no pre-written test in `tests/math/`, but tested in `tests/slicer/test_hyperplane.cpp`)
+3. All earlier-stage tests remain green (55 of 64 total tests pass; 9 are Rotor4D)
 
 ## Testing
 
-No test framework is set up yet. When tests are added they should cover:
+Test framework: **doctest v2.4.11** (fetched via CMake FetchContent).
 
-- Math4D operations (unit tests for Basis4D, Transform4D, rotations, slicing)
-- Shape-hyperplane intersection correctness
-- GJK/EPA convergence on known 4D shape pairs
-- Gravity solver accuracy (Kepler orbits in 4D)
-- Server API round-trips from GDScript
+```bash
+# Build and run tests (standalone, no godot-cpp needed)
+cd tests
+cmake -B build && cmake --build build
+./build/flintlock_tests
+```
+
+The test compat shim (`tests/support/godot_compat.h`) provides minimal `Vector4`,
+`Vector3`, and `real_t` definitions so tests compile without godot-cpp. Source headers
+use `__has_include` in `math_defs_4d.h` to conditionally pick the right types.
+
+Test files per stage are listed in `IMPLEMENTATION_PLAN.md`. Currently only Stage 1
+math tests are enabled in `tests/CMakeLists.txt`.
