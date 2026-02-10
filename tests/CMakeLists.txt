@@ -32,6 +32,34 @@ set(SRC_SOURCES
     ${SRC_DIR}/math/transform4d.cpp
     ${SRC_DIR}/math/aabb4d.cpp
     ${SRC_DIR}/math/rotor4d.cpp
+    ${SRC_DIR}/math/hyperplane4d.cpp
+
+    # Stage 2 — Shapes
+    ${SRC_DIR}/shapes/hyper_sphere_shape_4d.cpp
+    ${SRC_DIR}/shapes/hyper_box_shape_4d.cpp
+    ${SRC_DIR}/shapes/hyper_capsule_shape_4d.cpp
+    ${SRC_DIR}/shapes/hyper_ellipsoid_shape_4d.cpp
+    ${SRC_DIR}/shapes/convex_hull_4d.cpp
+
+    # Stage 3 — Slicer
+    ${SRC_DIR}/slicer/slice_result.cpp
+    ${SRC_DIR}/slicer/sphere_slicer.cpp
+    ${SRC_DIR}/slicer/polytope_slicer.cpp
+    ${SRC_DIR}/slicer/slicer4d.cpp
+
+    # Stage 4 — Collision
+    ${SRC_DIR}/collision/gjk_4d.cpp
+    ${SRC_DIR}/collision/broadphase_4d.cpp
+
+    # Stage 5 — Dynamics
+    ${SRC_DIR}/dynamics/gravity_4d.cpp
+    ${SRC_DIR}/dynamics/integrator_4d.cpp
+
+    # Stage 6 — Server
+    ${SRC_DIR}/server/physics_server_4d.cpp
+    ${SRC_DIR}/server/space_4d.cpp
+    ${SRC_DIR}/server/body_4d.cpp
+    ${SRC_DIR}/server/shape_4d_resource.cpp
 )
 
 # --- Test sources ------------------------------------------------------------
@@ -46,37 +74,40 @@ list(APPEND TEST_SOURCES
     math/test_transform4d.cpp
     math/test_aabb4d.cpp
     math/test_rotor4d.cpp
+    slicer/test_hyperplane.cpp
 )
 
 # Stage 2 — Shapes
-# list(APPEND TEST_SOURCES
-#     shapes/test_hyper_sphere_shape_4d.cpp
-#     shapes/test_hyper_box_shape_4d.cpp
-# )
+list(APPEND TEST_SOURCES
+    shapes/test_hyper_sphere_shape_4d.cpp
+    shapes/test_hyper_box_shape_4d.cpp
+    shapes/test_hyper_capsule_shape_4d.cpp
+    shapes/test_hyper_ellipsoid_shape_4d.cpp
+    shapes/test_convex_hull_4d.cpp
+)
 
 # Stage 3 — Slicer
-# list(APPEND TEST_SOURCES
-#     slicer/test_hyperplane.cpp
-#     slicer/test_sphere_slice.cpp
-#     slicer/test_box_slice.cpp
-# )
+list(APPEND TEST_SOURCES
+    slicer/test_sphere_slice.cpp
+    slicer/test_box_slice.cpp
+)
 
 # Stage 4 — Collision
-# list(APPEND TEST_SOURCES
-#     collision/test_gjk_4d.cpp
-#     collision/test_broadphase_4d.cpp
-# )
+list(APPEND TEST_SOURCES
+    collision/test_gjk_4d.cpp
+    collision/test_broadphase_4d.cpp
+)
 
 # Stage 5 — Dynamics
-# list(APPEND TEST_SOURCES
-#     dynamics/test_gravity_4d.cpp
-#     dynamics/test_integrator_4d.cpp
-# )
+list(APPEND TEST_SOURCES
+    dynamics/test_gravity_4d.cpp
+    dynamics/test_integrator_4d.cpp
+)
 
 # Stage 6 — Server
-# list(APPEND TEST_SOURCES
-#     server/test_physics_server_4d.cpp
-# )
+list(APPEND TEST_SOURCES
+    server/test_physics_server_4d.cpp
+)
 
 # --- Executable --------------------------------------------------------------
 add_executable(flintlock_tests ${TEST_SOURCES} ${SRC_SOURCES})

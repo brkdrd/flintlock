@@ -32,10 +32,10 @@ Basis4D Basis4D::from_rotation(RotationPlane p_plane, real_t p_angle) {
 		case PLANE_ZW: a = 2; bb = 3; break;
 	}
 
-	b.rows[a].components[a] = c;
-	b.rows[a].components[bb] = -s;
-	b.rows[bb].components[a] = s;
-	b.rows[bb].components[bb] = c;
+	b.rows[a].coord[a] = c;
+	b.rows[a].coord[bb] = -s;
+	b.rows[bb].coord[a] = s;
+	b.rows[bb].coord[bb] = c;
 
 	return b;
 }
@@ -60,15 +60,15 @@ void Basis4D::set_row(int p_idx, const Vector4 &p_row) {
 }
 
 Vector4 Basis4D::get_column(int p_idx) const {
-	return Vector4(rows[0].components[p_idx], rows[1].components[p_idx],
-			rows[2].components[p_idx], rows[3].components[p_idx]);
+	return Vector4(rows[0].coord[p_idx], rows[1].coord[p_idx],
+			rows[2].coord[p_idx], rows[3].coord[p_idx]);
 }
 
 void Basis4D::set_column(int p_idx, const Vector4 &p_col) {
-	rows[0].components[p_idx] = p_col.x;
-	rows[1].components[p_idx] = p_col.y;
-	rows[2].components[p_idx] = p_col.z;
-	rows[3].components[p_idx] = p_col.w;
+	rows[0].coord[p_idx] = p_col.x;
+	rows[1].coord[p_idx] = p_col.y;
+	rows[2].coord[p_idx] = p_col.z;
+	rows[3].coord[p_idx] = p_col.w;
 }
 
 // -- Transform ---------------------------------------------------------------
@@ -98,9 +98,9 @@ Basis4D Basis4D::operator*(const Basis4D &p_other) const {
 		for (int j = 0; j < 4; j++) {
 			real_t sum = 0;
 			for (int k = 0; k < 4; k++) {
-				sum += rows[i].components[k] * p_other.rows[k].components[j];
+				sum += rows[i].coord[k] * p_other.rows[k].coord[j];
 			}
-			result.rows[i].components[j] = sum;
+			result.rows[i].coord[j] = sum;
 		}
 	}
 	return result;
@@ -110,7 +110,7 @@ Basis4D Basis4D::transposed() const {
 	Basis4D t;
 	for (int i = 0; i < 4; i++) {
 		for (int j = 0; j < 4; j++) {
-			t.rows[i].components[j] = rows[j].components[i];
+			t.rows[i].coord[j] = rows[j].coord[i];
 		}
 	}
 	return t;
@@ -166,7 +166,7 @@ Basis4D Basis4D::inverse() const {
 				if (r == j) continue;
 				for (int c = 0; c < 4; c++) {
 					if (c == i) continue;
-					minor[idx++] = m[r].components[c];
+					minor[idx++] = m[r].coord[c];
 				}
 			}
 			real_t cofactor = det3(minor[0], minor[1], minor[2],
@@ -176,7 +176,7 @@ Basis4D Basis4D::inverse() const {
 			if ((i + j) % 2 != 0) {
 				cofactor = -cofactor;
 			}
-			result.rows[i].components[j] = cofactor * inv_det;
+			result.rows[i].coord[j] = cofactor * inv_det;
 		}
 	}
 	return result;
@@ -189,7 +189,7 @@ bool Basis4D::is_orthogonal() const {
 	Basis4D identity;
 	for (int i = 0; i < 4; i++) {
 		for (int j = 0; j < 4; j++) {
-			if (std::abs(product.rows[i].components[j] - identity.rows[i].components[j]) > CMP_EPSILON) {
+			if (std::abs(product.rows[i].coord[j] - identity.rows[i].coord[j]) > CMP_EPSILON) {
 				return false;
 			}
 		}

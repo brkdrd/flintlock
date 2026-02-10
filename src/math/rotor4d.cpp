@@ -222,7 +222,7 @@ Basis4D Rotor4D::to_basis() const {
 
 	// Row 0 (e1 component of R e_i R†):
 	m.rows[0] = Vector4(
-			s2 + b12 + b13 + b14 - b23 - b24 - b34 - p2,
+			s2 - b12 - b13 - b14 + b23 + b24 + b34 - p2,
 			2.0 * (s * e12 + e13 * e23 + e14 * e24 + e34 * e1234),
 			2.0 * (s * e13 - e12 * e23 + e14 * e34 - e24 * e1234),
 			2.0 * (s * e14 - e12 * e24 - e13 * e34 + e23 * e1234));
@@ -230,7 +230,7 @@ Basis4D Rotor4D::to_basis() const {
 	// Row 1 (e2):
 	m.rows[1] = Vector4(
 			2.0 * (-s * e12 + e13 * e23 + e14 * e24 - e34 * e1234),
-			s2 - b12 + b23 + b24 + b13 - b14 - b34 - p2,
+			s2 - b12 - b23 - b24 + b13 + b14 + b34 - p2,
 			2.0 * (s * e23 + e12 * e13 + e24 * e34 + e14 * e1234),
 			2.0 * (s * e24 + e12 * e14 - e23 * e34 - e13 * e1234));
 
@@ -238,7 +238,7 @@ Basis4D Rotor4D::to_basis() const {
 	m.rows[2] = Vector4(
 			2.0 * (-s * e13 - e12 * e23 + e14 * e34 + e24 * e1234),
 			2.0 * (-s * e23 + e12 * e13 + e24 * e34 - e14 * e1234),
-			s2 - b13 - b23 + b34 + b12 - b14 - b24 - p2,
+			s2 - b13 - b23 - b34 + b12 + b14 + b24 - p2,
 			2.0 * (s * e34 + e13 * e14 + e23 * e24 + e12 * e1234));
 
 	// Row 3 (e4):

@@ -40,6 +40,12 @@ env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
 env.Append(CPPPATH=["src/"])
 sources = Glob("src/*.cpp")
 sources += Glob("src/math/*.cpp")
+sources += Glob("src/shapes/*.cpp")
+sources += Glob("src/slicer/*.cpp")
+sources += Glob("src/collision/*.cpp")
+sources += Glob("src/dynamics/*.cpp")
+sources += Glob("src/server/*.cpp")
+sources += Glob("src/nodes/*.cpp")
 
 if env["target"] in ["editor", "template_debug"]:
     try:
