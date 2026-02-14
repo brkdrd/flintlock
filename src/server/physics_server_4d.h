@@ -5,22 +5,28 @@
 #include <map>
 #include <vector>
 
-// Simplified RID for testing (in real Godot integration, use godot::RID)
-class RID {
-public:
-	RID() : id(0) {}
-	explicit RID(uint64_t p_id) : id(p_id) {}
+// Internal RID type for physics resources
+// Note: This is separate from godot::RID which is Godot's resource system
+// Our RID is just a simple uint64 handle for internal physics objects
+namespace flintlock {
+	class PhysicsRID {
+	public:
+		PhysicsRID() : id(0) {}
+		explicit PhysicsRID(uint64_t p_id) : id(p_id) {}
 
-	bool is_valid() const { return id != 0; }
-	bool operator==(const RID &p_other) const { return id == p_other.id; }
-	bool operator!=(const RID &p_other) const { return id != p_other.id; }
-	bool operator<(const RID &p_other) const { return id < p_other.id; }
+		bool is_valid() const { return id != 0; }
+		bool operator==(const PhysicsRID &p_other) const { return id == p_other.id; }
+		bool operator!=(const PhysicsRID &p_other) const { return id != p_other.id; }
+		bool operator<(const PhysicsRID &p_other) const { return id < p_other.id; }
 
-	uint64_t get_id() const { return id; }
+		uint64_t get_id() const { return id; }
 
-private:
-	uint64_t id;
-};
+	private:
+		uint64_t id;
+	};
+}
+
+// Note: We use flintlock::PhysicsRID explicitly to avoid conflicts with godot::RID
 
 // Forward declarations
 class Space4D;
@@ -92,41 +98,41 @@ public:
 	static void finalize();
 
 	// Space management
-	RID space_create();
-	void space_set_active(RID p_space, bool p_active);
+	flintlock::PhysicsRID space_create();
+	void space_set_active(flintlock::PhysicsRID p_space, bool p_active);
 
 	// Body management
-	RID body_create();
-	void body_set_space(RID p_body, RID p_space);
-	void body_set_mode(RID p_body, BodyMode p_mode);
+	flintlock::PhysicsRID body_create();
+	void body_set_space(flintlock::PhysicsRID p_body, flintlock::PhysicsRID p_space);
+	void body_set_mode(flintlock::PhysicsRID p_body, BodyMode p_mode);
 
 	// Body state
-	void body_set_state(RID p_body, BodyState p_state, const Vector4 &p_value);
-	void body_set_state(RID p_body, BodyState p_state, const Transform4D &p_value);
-	BodyStateValue body_get_state(RID p_body, BodyState p_state);
+	void body_set_state(flintlock::PhysicsRID p_body, BodyState p_state, const Vector4 &p_value);
+	void body_set_state(flintlock::PhysicsRID p_body, BodyState p_state, const Transform4D &p_value);
+	BodyStateValue body_get_state(flintlock::PhysicsRID p_body, BodyState p_state);
 
 	// Body parameters
-	void body_set_param(RID p_body, BodyParam p_param, real_t p_value);
-	real_t body_get_param(RID p_body, BodyParam p_param);
+	void body_set_param(flintlock::PhysicsRID p_body, BodyParam p_param, real_t p_value);
+	real_t body_get_param(flintlock::PhysicsRID p_body, BodyParam p_param);
 
 	// Body forces
-	void body_apply_impulse(RID p_body, const Vector4 &p_impulse, const Vector4 &p_position = Vector4());
-	void body_apply_force(RID p_body, const Vector4 &p_force, const Vector4 &p_position = Vector4());
+	void body_apply_impulse(flintlock::PhysicsRID p_body, const Vector4 &p_impulse, const Vector4 &p_position = Vector4());
+	void body_apply_force(flintlock::PhysicsRID p_body, const Vector4 &p_force, const Vector4 &p_position = Vector4());
 
 	// Shape management
-	RID shape_create(ShapeType p_type);
-	void shape_set_data(RID p_shape, real_t p_data); // For sphere radius
-	void shape_set_data(RID p_shape, const Vector4 &p_data); // For box half-extents
+	flintlock::PhysicsRID shape_create(ShapeType p_type);
+	void shape_set_data(flintlock::PhysicsRID p_shape, real_t p_data); // For sphere radius
+	void shape_set_data(flintlock::PhysicsRID p_shape, const Vector4 &p_data); // For box half-extents
 
 	// Body-shape attachment
-	void body_add_shape(RID p_body, RID p_shape, const Transform4D &p_transform);
-	void body_remove_shape(RID p_body, int p_index);
+	void body_add_shape(flintlock::PhysicsRID p_body, flintlock::PhysicsRID p_shape, const Transform4D &p_transform);
+	void body_remove_shape(flintlock::PhysicsRID p_body, int p_index);
 
 	// Simulation
 	void step(real_t p_delta);
 
 	// Cleanup
-	void free_rid(RID p_rid);
+	void free_rid(flintlock::PhysicsRID p_rid);
 
 private:
 	PhysicsServer4D();
@@ -136,15 +142,15 @@ private:
 
 	// RID allocation
 	uint64_t next_rid_id = 1;
-	RID allocate_rid() { return RID(next_rid_id++); }
+	flintlock::PhysicsRID allocate_rid() { return flintlock::PhysicsRID(next_rid_id++); }
 
 	// Resource storage
-	std::map<RID, Space4D*> spaces;
-	std::map<RID, Body4D*> bodies;
-	std::map<RID, Shape4DResource*> shapes;
+	std::map<flintlock::PhysicsRID, Space4D*> spaces;
+	std::map<flintlock::PhysicsRID, Body4D*> bodies;
+	std::map<flintlock::PhysicsRID, Shape4DResource*> shapes;
 
 	// Lookup helpers
-	Space4D *get_space(RID p_rid);
-	Body4D *get_body(RID p_rid);
-	Shape4DResource *get_shape(RID p_rid);
+	Space4D *get_space(flintlock::PhysicsRID p_rid);
+	Body4D *get_body(flintlock::PhysicsRID p_rid);
+	Shape4DResource *get_shape(flintlock::PhysicsRID p_rid);
 };

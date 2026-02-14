@@ -39,13 +39,13 @@ void PhysicsServer4D::finalize() {
 }
 
 // Space management
-RID PhysicsServer4D::space_create() {
-	RID rid = allocate_rid();
+flintlock::PhysicsRID PhysicsServer4D::space_create() {
+	flintlock::PhysicsRID rid = allocate_rid();
 	spaces[rid] = new Space4D();
 	return rid;
 }
 
-void PhysicsServer4D::space_set_active(RID p_space, bool p_active) {
+void PhysicsServer4D::space_set_active(flintlock::PhysicsRID p_space, bool p_active) {
 	Space4D *space = get_space(p_space);
 	if (space) {
 		space->set_active(p_active);
@@ -53,13 +53,13 @@ void PhysicsServer4D::space_set_active(RID p_space, bool p_active) {
 }
 
 // Body management
-RID PhysicsServer4D::body_create() {
-	RID rid = allocate_rid();
+flintlock::PhysicsRID PhysicsServer4D::body_create() {
+	flintlock::PhysicsRID rid = allocate_rid();
 	bodies[rid] = new Body4D();
 	return rid;
 }
 
-void PhysicsServer4D::body_set_space(RID p_body, RID p_space) {
+void PhysicsServer4D::body_set_space(flintlock::PhysicsRID p_body, flintlock::PhysicsRID p_space) {
 	Body4D *body = get_body(p_body);
 	Space4D *space = get_space(p_space);
 	if (body) {
@@ -67,7 +67,7 @@ void PhysicsServer4D::body_set_space(RID p_body, RID p_space) {
 	}
 }
 
-void PhysicsServer4D::body_set_mode(RID p_body, BodyMode p_mode) {
+void PhysicsServer4D::body_set_mode(flintlock::PhysicsRID p_body, BodyMode p_mode) {
 	Body4D *body = get_body(p_body);
 	if (body) {
 		body->set_mode(static_cast<BodyState4D::Mode>(p_mode));
@@ -75,7 +75,7 @@ void PhysicsServer4D::body_set_mode(RID p_body, BodyMode p_mode) {
 }
 
 // Body state
-void PhysicsServer4D::body_set_state(RID p_body, BodyState p_state, const Vector4 &p_value) {
+void PhysicsServer4D::body_set_state(flintlock::PhysicsRID p_body, BodyState p_state, const Vector4 &p_value) {
 	Body4D *body = get_body(p_body);
 	if (!body) return;
 
@@ -88,7 +88,7 @@ void PhysicsServer4D::body_set_state(RID p_body, BodyState p_state, const Vector
 	}
 }
 
-void PhysicsServer4D::body_set_state(RID p_body, BodyState p_state, const Transform4D &p_value) {
+void PhysicsServer4D::body_set_state(flintlock::PhysicsRID p_body, BodyState p_state, const Transform4D &p_value) {
 	Body4D *body = get_body(p_body);
 	if (!body) return;
 
@@ -101,7 +101,7 @@ void PhysicsServer4D::body_set_state(RID p_body, BodyState p_state, const Transf
 	}
 }
 
-BodyStateValue PhysicsServer4D::body_get_state(RID p_body, BodyState p_state) {
+BodyStateValue PhysicsServer4D::body_get_state(flintlock::PhysicsRID p_body, BodyState p_state) {
 	Body4D *body = get_body(p_body);
 	if (!body) return BodyStateValue();
 
@@ -116,7 +116,7 @@ BodyStateValue PhysicsServer4D::body_get_state(RID p_body, BodyState p_state) {
 }
 
 // Body parameters
-void PhysicsServer4D::body_set_param(RID p_body, BodyParam p_param, real_t p_value) {
+void PhysicsServer4D::body_set_param(flintlock::PhysicsRID p_body, BodyParam p_param, real_t p_value) {
 	Body4D *body = get_body(p_body);
 	if (!body) return;
 
@@ -132,7 +132,7 @@ void PhysicsServer4D::body_set_param(RID p_body, BodyParam p_param, real_t p_val
 	}
 }
 
-real_t PhysicsServer4D::body_get_param(RID p_body, BodyParam p_param) {
+real_t PhysicsServer4D::body_get_param(flintlock::PhysicsRID p_body, BodyParam p_param) {
 	Body4D *body = get_body(p_body);
 	if (!body) return 0.0;
 
@@ -147,14 +147,14 @@ real_t PhysicsServer4D::body_get_param(RID p_body, BodyParam p_param) {
 }
 
 // Body forces
-void PhysicsServer4D::body_apply_impulse(RID p_body, const Vector4 &p_impulse, const Vector4 &p_position) {
+void PhysicsServer4D::body_apply_impulse(flintlock::PhysicsRID p_body, const Vector4 &p_impulse, const Vector4 &p_position) {
 	Body4D *body = get_body(p_body);
 	if (body) {
 		body->apply_impulse(p_impulse, p_position);
 	}
 }
 
-void PhysicsServer4D::body_apply_force(RID p_body, const Vector4 &p_force, const Vector4 &p_position) {
+void PhysicsServer4D::body_apply_force(flintlock::PhysicsRID p_body, const Vector4 &p_force, const Vector4 &p_position) {
 	Body4D *body = get_body(p_body);
 	if (body) {
 		body->apply_force(p_force, p_position);
@@ -162,8 +162,8 @@ void PhysicsServer4D::body_apply_force(RID p_body, const Vector4 &p_force, const
 }
 
 // Shape management
-RID PhysicsServer4D::shape_create(ShapeType p_type) {
-	RID rid = allocate_rid();
+flintlock::PhysicsRID PhysicsServer4D::shape_create(ShapeType p_type) {
+	flintlock::PhysicsRID rid = allocate_rid();
 	Shape4DResource::Type res_type;
 
 	switch (p_type) {
@@ -182,14 +182,14 @@ RID PhysicsServer4D::shape_create(ShapeType p_type) {
 	return rid;
 }
 
-void PhysicsServer4D::shape_set_data(RID p_shape, real_t p_data) {
+void PhysicsServer4D::shape_set_data(flintlock::PhysicsRID p_shape, real_t p_data) {
 	Shape4DResource *shape = get_shape(p_shape);
 	if (shape && shape->get_type() == Shape4DResource::TYPE_HYPER_SPHERE) {
 		shape->set_sphere_radius(p_data);
 	}
 }
 
-void PhysicsServer4D::shape_set_data(RID p_shape, const Vector4 &p_data) {
+void PhysicsServer4D::shape_set_data(flintlock::PhysicsRID p_shape, const Vector4 &p_data) {
 	Shape4DResource *shape = get_shape(p_shape);
 	if (shape && shape->get_type() == Shape4DResource::TYPE_HYPER_BOX) {
 		shape->set_box_half_extents(p_data);
@@ -197,7 +197,7 @@ void PhysicsServer4D::shape_set_data(RID p_shape, const Vector4 &p_data) {
 }
 
 // Body-shape attachment
-void PhysicsServer4D::body_add_shape(RID p_body, RID p_shape, const Transform4D &p_transform) {
+void PhysicsServer4D::body_add_shape(flintlock::PhysicsRID p_body, flintlock::PhysicsRID p_shape, const Transform4D &p_transform) {
 	Body4D *body = get_body(p_body);
 	Shape4DResource *shape_res = get_shape(p_shape);
 
@@ -206,7 +206,7 @@ void PhysicsServer4D::body_add_shape(RID p_body, RID p_shape, const Transform4D 
 	}
 }
 
-void PhysicsServer4D::body_remove_shape(RID p_body, int p_index) {
+void PhysicsServer4D::body_remove_shape(flintlock::PhysicsRID p_body, int p_index) {
 	Body4D *body = get_body(p_body);
 	if (body) {
 		body->remove_shape(p_index);
@@ -222,7 +222,7 @@ void PhysicsServer4D::step(real_t p_delta) {
 }
 
 // Cleanup
-void PhysicsServer4D::free_rid(RID p_rid) {
+void PhysicsServer4D::free_rid(flintlock::PhysicsRID p_rid) {
 	// Try to free as space
 	auto space_it = spaces.find(p_rid);
 	if (space_it != spaces.end()) {
@@ -251,17 +251,17 @@ void PhysicsServer4D::free_rid(RID p_rid) {
 }
 
 // Lookup helpers
-Space4D *PhysicsServer4D::get_space(RID p_rid) {
+Space4D *PhysicsServer4D::get_space(flintlock::PhysicsRID p_rid) {
 	auto it = spaces.find(p_rid);
 	return (it != spaces.end()) ? it->second : nullptr;
 }
 
-Body4D *PhysicsServer4D::get_body(RID p_rid) {
+Body4D *PhysicsServer4D::get_body(flintlock::PhysicsRID p_rid) {
 	auto it = bodies.find(p_rid);
 	return (it != bodies.end()) ? it->second : nullptr;
 }
 
-Shape4DResource *PhysicsServer4D::get_shape(RID p_rid) {
+Shape4DResource *PhysicsServer4D::get_shape(flintlock::PhysicsRID p_rid) {
 	auto it = shapes.find(p_rid);
 	return (it != shapes.end()) ? it->second : nullptr;
 }

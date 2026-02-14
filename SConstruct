@@ -46,6 +46,7 @@ sources += Glob("src/collision/*.cpp")
 sources += Glob("src/dynamics/*.cpp")
 sources += Glob("src/server/*.cpp")
 sources += Glob("src/nodes/*.cpp")
+sources += Glob("src/resources/*.cpp")
 
 if env["target"] in ["editor", "template_debug"]:
     try:

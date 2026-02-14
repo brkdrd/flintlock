@@ -6,31 +6,43 @@
 #include <godot_cpp/godot.hpp>
 #include <godot_cpp/classes/engine.hpp>
 
-// TODO: Will need Godot-native implementations of these classes
-// For now, just register the basic structure
+// Include our Godot-facing classes
+#include "nodes/rigid_body_4d.h"
+#include "nodes/static_body_4d.h"
+#include "nodes/collision_shape_4d.h"
+#include "resources/hyper_sphere_shape_4d_resource.h"
+
+// Include server for singleton initialization
+#include "server/physics_server_4d.h"
 
 using namespace godot;
 
 void initialize_flintlock_module(ModuleInitializationLevel p_level)
 {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		// Register PhysicsServer4D singleton
-		// TODO: Create Godot-native PhysicsServer4D class
+		// Initialize PhysicsServer4D singleton
+		PhysicsServer4D::initialize();
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
-		// Register scene node classes
-		// TODO: Register RigidBody4D, StaticBody4D, Area4D, CollisionShape4D, etc.
+		// Register node classes
+		GDREGISTER_CLASS(RigidBody4D);
+		GDREGISTER_CLASS(StaticBody4D);
+		GDREGISTER_CLASS(CollisionShape4D);
+
+		// Register resource classes
+		GDREGISTER_CLASS(HyperSphereShape4DResource);
 	}
 }
 
 void uninitialize_flintlock_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		// Cleanup server singletons
+		// Cleanup PhysicsServer4D singleton
+		PhysicsServer4D::finalize();
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
-		// Cleanup scene resources
+		// Cleanup scene resources (if needed)
 	}
 }
 
