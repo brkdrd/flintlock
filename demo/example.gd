@@ -4,18 +4,24 @@ extends Node
 
 func _ready() -> void:
 	print("=== Flintlock 4D Physics Demo ===")
+	print("")
 
 	# Test that PhysicsServer4D singleton is available
 	if PhysicsServer4D:
-		print("✓ PhysicsServer4D singleton initialized")
+		print("✓ PhysicsServer4D singleton is accessible from GDScript")
+		print("  Type: ", PhysicsServer4D.get_class())
 	else:
-		print("✗ PhysicsServer4D not found")
+		print("✗ PhysicsServer4D singleton not found!")
 		return
 
-	# Create a simple 4D rigid body
+	# Test creating a body through the server directly
+	var server_body := PhysicsServer4D.body_create()
+	print("✓ Created body via PhysicsServer4D: ", server_body)
+
+	# Create a simple 4D rigid body node
 	var body := RigidBody4D.new()
 	add_child(body)
-	print("✓ Created RigidBody4D: ", body)
+	print("✓ Created RigidBody4D node: ", body)
 
 	# Create a collision shape
 	var collision_shape := CollisionShape4D.new()
@@ -28,5 +34,15 @@ func _ready() -> void:
 	collision_shape.shape = shape
 	print("✓ Created HyperSphereShape4DResource with radius: ", shape.radius)
 
+	# Test setting 4D position and velocity
+	body.set_position_4d(Vector4(1.0, 2.0, 3.0, 4.0))
+	var pos := body.get_position_4d()
+	print("✓ Set 4D position: ", pos)
+
+	body.set_linear_velocity(Vector4(0.1, 0.2, 0.3, 0.4))
+	var vel := body.get_linear_velocity()
+	print("✓ Set linear velocity: ", vel)
+
+	print("")
 	print("=== Demo complete ===")
-	print("Flintlock is working! The 4D physics classes are available.")
+	print("Flintlock is working! The 4D physics classes and server are available.")

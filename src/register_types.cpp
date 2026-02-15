@@ -14,14 +14,25 @@
 
 // Include server for singleton initialization
 #include "server/physics_server_4d.h"
+#include "server/physics_server_4d_godot.h"
 
 using namespace godot;
+
+// Keep a reference to the singleton instance
+static PhysicsServer4DGodot *physics_server_4d_singleton = nullptr;
 
 void initialize_flintlock_module(ModuleInitializationLevel p_level)
 {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		// Initialize PhysicsServer4D singleton
+		// Initialize internal PhysicsServer4D C++ singleton
 		PhysicsServer4D::initialize();
+
+		// Register the Godot-facing wrapper class
+		GDREGISTER_CLASS(PhysicsServer4DGodot);
+
+		// Create and register the PhysicsServer4D singleton for GDScript
+		physics_server_4d_singleton = memnew(PhysicsServer4DGodot);
+		Engine::get_singleton()->register_singleton("PhysicsServer4D", physics_server_4d_singleton);
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
@@ -37,7 +48,14 @@ void initialize_flintlock_module(ModuleInitializationLevel p_level)
 
 void uninitialize_flintlock_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		// Cleanup PhysicsServer4D singleton
+		// Unregister and cleanup the Godot singleton
+		if (physics_server_4d_singleton) {
+			Engine::get_singleton()->unregister_singleton("PhysicsServer4D");
+			memdelete(physics_server_4d_singleton);
+			physics_server_4d_singleton = nullptr;
+		}
+
+		// Cleanup internal PhysicsServer4D singleton
 		PhysicsServer4D::finalize();
 	}
 
