@@ -69,8 +69,8 @@ void PhysicsServer4DGodot::_bind_methods() {
 
 // RID conversion helpers
 flintlock::PhysicsRID PhysicsServer4DGodot::to_internal_rid(const RID &p_godot_rid) {
-	uint64_t godot_id = p_godot_rid.get_id();
-	auto it = rid_map.find(godot_id);
+	int64_t rid_id = p_godot_rid.get_id();
+	auto it = rid_map.find(rid_id);
 	if (it != rid_map.end()) {
 		return it->second;
 	}
@@ -80,17 +80,21 @@ flintlock::PhysicsRID PhysicsServer4DGodot::to_internal_rid(const RID &p_godot_r
 RID PhysicsServer4DGodot::to_godot_rid(const flintlock::PhysicsRID &p_internal_rid) {
 	uint64_t internal_id = p_internal_rid.get_id();
 
-	// Check if we already have a mapping
-	auto it = reverse_rid_map.find(internal_id);
-	if (it != reverse_rid_map.end()) {
-		return RID::from_uint64(it->second);
+	// Check if we already have a stored RID for this internal RID
+	auto storage_it = rid_storage.find(internal_id);
+	if (storage_it != rid_storage.end()) {
+		return storage_it->second;
 	}
 
-	// Create new mapping
-	uint64_t godot_id = next_godot_rid_id++;
-	rid_map[godot_id] = p_internal_rid;
-	reverse_rid_map[internal_id] = godot_id;
-	return RID::from_uint64(godot_id);
+	// Create a new RID and store it
+	RID new_rid;
+	int64_t rid_id = new_rid.get_id();
+
+	// Store bidirectional mapping
+	rid_map[rid_id] = p_internal_rid;
+	rid_storage[internal_id] = new_rid;
+
+	return new_rid;
 }
 
 // Space management
@@ -249,12 +253,12 @@ void PhysicsServer4DGodot::free_rid(const RID &p_rid) {
 	flintlock::PhysicsRID internal_rid = to_internal_rid(p_rid);
 	server->free_rid(internal_rid);
 
-	// Remove from our mapping
-	uint64_t godot_id = p_rid.get_id();
-	auto it = rid_map.find(godot_id);
+	// Remove from our mappings
+	int64_t rid_id = p_rid.get_id();
+	auto it = rid_map.find(rid_id);
 	if (it != rid_map.end()) {
 		uint64_t internal_id = it->second.get_id();
-		reverse_rid_map.erase(internal_id);
+		rid_storage.erase(internal_id);
 		rid_map.erase(it);
 	}
 }

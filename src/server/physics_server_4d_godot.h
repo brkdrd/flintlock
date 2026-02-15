@@ -99,10 +99,11 @@ private:
 	flintlock::PhysicsRID to_internal_rid(const RID &p_godot_rid);
 	RID to_godot_rid(const flintlock::PhysicsRID &p_internal_rid);
 
-	// RID mapping (godot::RID <-> flintlock::PhysicsRID)
-	std::map<uint64_t, flintlock::PhysicsRID> rid_map;
-	std::map<uint64_t, uint64_t> reverse_rid_map;
-	uint64_t next_godot_rid_id = 1;
+	// RID mapping: RID's ID → internal PhysicsRID
+	std::map<int64_t, flintlock::PhysicsRID> rid_map;
+
+	// Reverse mapping: internal PhysicsRID ID → stored RID object
+	std::map<uint64_t, RID> rid_storage;
 };
 
 VARIANT_ENUM_CAST(PhysicsServer4DGodot::BodyMode);
