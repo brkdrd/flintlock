@@ -1,6 +1,6 @@
 #pragma once
 
-#include <godot_cpp/classes/node3d.hpp>
+#include "node_4d.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/vector4.hpp>
 #include "server/physics_server_4d.h"
@@ -11,15 +11,14 @@ using namespace godot;
 ///
 /// This is the Godot-facing wrapper around our internal physics implementation.
 /// It integrates with Godot's scene tree and can be controlled from GDScript.
-class RigidBody4D : public Node3D {
-	GDCLASS(RigidBody4D, Node3D)
+class RigidBody4D : public Node4D {
+	GDCLASS(RigidBody4D, Node4D)
 
 private:
 	flintlock::PhysicsRID body_rid;
 	real_t mass = 1.0;
 	real_t linear_damp = 0.0;
 	Vector4 linear_velocity = Vector4(0, 0, 0, 0);
-	Vector4 position_4d = Vector4(0, 0, 0, 0);
 
 public:
 	RigidBody4D();
@@ -32,10 +31,6 @@ public:
 	// Damping
 	void set_linear_damp(real_t p_damp);
 	real_t get_linear_damp() const;
-
-	// Position in 4D
-	void set_position_4d(const Vector4 &p_position);
-	Vector4 get_position_4d() const;
 
 	// Velocity
 	void set_linear_velocity(const Vector4 &p_velocity);

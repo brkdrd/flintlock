@@ -6,17 +6,18 @@ func _ready() -> void:
 	print("=== Flintlock 4D Physics Demo ===")
 	print("")
 
+	# NOTE: PhysicsServer4D singleton temporarily disabled for debugging
 	# Test that PhysicsServer4D singleton is available
-	if PhysicsServer4D:
-		print("✓ PhysicsServer4D singleton is accessible from GDScript")
-		print("  Type: ", PhysicsServer4D.get_class())
-	else:
-		print("✗ PhysicsServer4D singleton not found!")
-		return
+	# if PhysicsServer4D:
+	# 	print("✓ PhysicsServer4D singleton is accessible from GDScript")
+	# 	print("  Type: ", PhysicsServer4D.get_class())
+	# else:
+	# 	print("✗ PhysicsServer4D singleton not found!")
+	# 	return
 
 	# Test creating a body through the server directly
-	var server_body := PhysicsServer4D.body_create()
-	print("✓ Created body via PhysicsServer4D: ", server_body)
+	# var server_body := PhysicsServer4D.body_create()
+	# print("✓ Created body via PhysicsServer4D: ", server_body)
 
 	# Create a simple 4D rigid body node
 	var body := RigidBody4D.new()

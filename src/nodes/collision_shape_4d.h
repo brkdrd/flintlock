@@ -1,6 +1,6 @@
 #pragma once
 
-#include <godot_cpp/classes/node3d.hpp>
+#include "node_4d.h"
 #include <godot_cpp/classes/resource.hpp>
 #include <godot_cpp/core/class_db.hpp>
 
@@ -13,8 +13,8 @@ class Shape4DResource;
 ///
 /// Must be a child of RigidBody4D or StaticBody4D.
 /// The shape property determines the collision geometry.
-class CollisionShape4D : public Node3D {
-	GDCLASS(CollisionShape4D, Node3D)
+class CollisionShape4D : public Node4D {
+	GDCLASS(CollisionShape4D, Node4D)
 
 private:
 	Ref<Resource> shape;

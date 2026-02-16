@@ -22,10 +22,8 @@ void RigidBody4D::_ready() {
 	server->body_set_param(body_rid, PhysicsServer4D::BODY_PARAM_MASS, mass);
 	server->body_set_param(body_rid, PhysicsServer4D::BODY_PARAM_LINEAR_DAMP, linear_damp);
 
-	// Set initial transform
-	Transform4D transform;
-	transform.origin = position_4d;
-	server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform);
+	// Set initial transform from Node4D's transform_4d
+	server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform_4d);
 
 	server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY, linear_velocity);
 
@@ -39,13 +37,12 @@ void RigidBody4D::_physics_process(double p_delta) {
 	}
 
 	// Read back the physics state
-	Transform4D transform = server->body_get_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM);
-	position_4d = transform.origin;
+	transform_4d = server->body_get_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM);
 
 	linear_velocity = server->body_get_state(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY);
 
-	// Update 3D position for rendering (project to 3D)
-	set_position(Vector3(position_4d.x, position_4d.y, position_4d.z));
+	// Update 3D position for rendering (inherited from Node4D)
+	_update_3d_position();
 }
 
 void RigidBody4D::_exit_tree() {
@@ -80,21 +77,6 @@ void RigidBody4D::set_linear_damp(real_t p_damp) {
 
 real_t RigidBody4D::get_linear_damp() const {
 	return linear_damp;
-}
-
-// Position
-void RigidBody4D::set_position_4d(const Vector4 &p_position) {
-	position_4d = p_position;
-	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (server && body_rid.is_valid()) {
-		Transform4D transform;
-		transform.origin = position_4d;
-		server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform);
-	}
-}
-
-Vector4 RigidBody4D::get_position_4d() const {
-	return position_4d;
 }
 
 // Velocity
@@ -141,10 +123,7 @@ void RigidBody4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_linear_damp"), &RigidBody4D::get_linear_damp);
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "linear_damp"), "set_linear_damp", "get_linear_damp");
 
-	// Position
-	ClassDB::bind_method(D_METHOD("set_position_4d", "position"), &RigidBody4D::set_position_4d);
-	ClassDB::bind_method(D_METHOD("get_position_4d"), &RigidBody4D::get_position_4d);
-	ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "position_4d"), "set_position_4d", "get_position_4d");
+	// Note: position_4d is inherited from Node4D
 
 	// Velocity
 	ClassDB::bind_method(D_METHOD("set_linear_velocity", "velocity"), &RigidBody4D::set_linear_velocity);

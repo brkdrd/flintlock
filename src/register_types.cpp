@@ -7,10 +7,15 @@
 #include <godot_cpp/classes/engine.hpp>
 
 // Include our Godot-facing classes
+#include "nodes/node_4d.h"
 #include "nodes/rigid_body_4d.h"
 #include "nodes/static_body_4d.h"
 #include "nodes/collision_shape_4d.h"
 #include "resources/hyper_sphere_shape_4d_resource.h"
+#include "resources/hyper_box_shape_4d_resource.h"
+#include "resources/hyper_capsule_shape_4d_resource.h"
+#include "resources/hyper_ellipsoid_shape_4d_resource.h"
+#include "resources/convex_hull_4d_resource.h"
 
 // Include server for singleton initialization
 #include "server/physics_server_4d.h"
@@ -30,19 +35,30 @@ void initialize_flintlock_module(ModuleInitializationLevel p_level)
 		// Register the Godot-facing wrapper class
 		GDREGISTER_CLASS(PhysicsServer4DGodot);
 
+		// TODO: Temporarily disabled singleton registration for debugging
 		// Create and register the PhysicsServer4D singleton for GDScript
-		physics_server_4d_singleton = memnew(PhysicsServer4DGodot);
-		Engine::get_singleton()->register_singleton("PhysicsServer4D", physics_server_4d_singleton);
+		// Note: Using memnew is correct for Godot objects
+		// physics_server_4d_singleton = memnew(PhysicsServer4DGodot);
+		// if (physics_server_4d_singleton && Engine::get_singleton()) {
+		// 	Engine::get_singleton()->register_singleton("PhysicsServer4D", physics_server_4d_singleton);
+		// }
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+		// Register base node class
+		GDREGISTER_CLASS(Node4D);
+
 		// Register node classes
 		GDREGISTER_CLASS(RigidBody4D);
 		GDREGISTER_CLASS(StaticBody4D);
 		GDREGISTER_CLASS(CollisionShape4D);
 
-		// Register resource classes
+		// Register resource classes (shape resources)
 		GDREGISTER_CLASS(HyperSphereShape4DResource);
+		GDREGISTER_CLASS(HyperBoxShape4DResource);
+		GDREGISTER_CLASS(HyperCapsuleShape4DResource);
+		GDREGISTER_CLASS(HyperEllipsoidShape4DResource);
+		GDREGISTER_CLASS(ConvexHull4DResource);
 	}
 }
 
