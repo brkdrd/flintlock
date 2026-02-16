@@ -25,7 +25,7 @@ void RigidBody4D::_ready() {
 	// Set initial transform from Node4D's transform_4d
 	server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform_4d);
 
-	server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY, linear_velocity);
+	server->body_set_state_vector(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY, linear_velocity);
 
 	// TODO: Add to space (for now, bodies aren't in a space automatically)
 }
@@ -48,7 +48,7 @@ void RigidBody4D::_exit_tree() {
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
 	if (server && body_rid.is_valid()) {
 		server->free_rid(body_rid);
-		body_rid = flintlock::PhysicsRID();
+		body_rid = RID();
 	}
 }
 
@@ -83,7 +83,7 @@ void RigidBody4D::set_linear_velocity(const Vector4 &p_velocity) {
 	linear_velocity = p_velocity;
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
 	if (server && body_rid.is_valid()) {
-		server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY, linear_velocity);
+		server->body_set_state_vector(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY, linear_velocity);
 	}
 }
 
@@ -104,10 +104,6 @@ void RigidBody4D::apply_force(const Vector4 &p_force, const Vector4 &p_position)
 	if (server && body_rid.is_valid()) {
 		server->body_apply_force(body_rid, p_force, p_position);
 	}
-}
-
-flintlock::PhysicsRID RigidBody4D::get_rid() const {
-	return body_rid;
 }
 
 // Bind methods for GDScript exposure

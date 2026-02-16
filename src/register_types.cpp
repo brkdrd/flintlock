@@ -8,8 +8,11 @@
 
 // Include our Godot-facing classes
 #include "nodes/node_4d.h"
+#include "nodes/physics_body_4d.h"
 #include "nodes/rigid_body_4d.h"
 #include "nodes/static_body_4d.h"
+#include "nodes/character_body_4d.h"
+#include "nodes/area_4d.h"
 #include "nodes/collision_shape_4d.h"
 #include "resources/hyper_sphere_shape_4d_resource.h"
 #include "resources/hyper_box_shape_4d_resource.h"
@@ -19,37 +22,36 @@
 
 // Include server for singleton initialization
 #include "server/physics_server_4d.h"
-#include "server/physics_server_4d_godot.h"
 
 using namespace godot;
 
 // Keep a reference to the singleton instance
-static PhysicsServer4DGodot *physics_server_4d_singleton = nullptr;
+static PhysicsServer4D *physics_server_4d_singleton = nullptr;
 
 void initialize_flintlock_module(ModuleInitializationLevel p_level)
 {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		// Initialize internal PhysicsServer4D C++ singleton
-		PhysicsServer4D::initialize();
-
-		// Register the Godot-facing wrapper class
-		GDREGISTER_CLASS(PhysicsServer4DGodot);
+		// Register the PhysicsServer4D class
+		GDREGISTER_CLASS(PhysicsServer4D);
 
 		// Create and register the PhysicsServer4D singleton for GDScript
 		// Note: Using memnew is correct for Godot objects
-		physics_server_4d_singleton = memnew(PhysicsServer4DGodot);
+		physics_server_4d_singleton = memnew(PhysicsServer4D);
 		if (physics_server_4d_singleton && Engine::get_singleton()) {
 			Engine::get_singleton()->register_singleton("PhysicsServer4D", physics_server_4d_singleton);
 		}
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
-		// Register base node class
+		// Register base node classes
 		GDREGISTER_CLASS(Node4D);
+		GDREGISTER_CLASS(PhysicsBody4D);
 
-		// Register node classes
+		// Register physics body node classes
 		GDREGISTER_CLASS(RigidBody4D);
 		GDREGISTER_CLASS(StaticBody4D);
+		GDREGISTER_CLASS(CharacterBody4D);
+		GDREGISTER_CLASS(Area4D);
 		GDREGISTER_CLASS(CollisionShape4D);
 
 		// Register resource classes (shape resources)
@@ -69,9 +71,6 @@ void uninitialize_flintlock_module(ModuleInitializationLevel p_level) {
 			memdelete(physics_server_4d_singleton);
 			physics_server_4d_singleton = nullptr;
 		}
-
-		// Cleanup internal PhysicsServer4D singleton
-		PhysicsServer4D::finalize();
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {

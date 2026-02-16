@@ -29,12 +29,8 @@ void StaticBody4D::_exit_tree() {
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
 	if (server && body_rid.is_valid()) {
 		server->free_rid(body_rid);
-		body_rid = flintlock::PhysicsRID();
+		body_rid = RID();
 	}
-}
-
-flintlock::PhysicsRID StaticBody4D::get_rid() const {
-	return body_rid;
 }
 
 void StaticBody4D::_bind_methods() {
