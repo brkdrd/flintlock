@@ -35,13 +35,12 @@ void initialize_flintlock_module(ModuleInitializationLevel p_level)
 		// Register the Godot-facing wrapper class
 		GDREGISTER_CLASS(PhysicsServer4DGodot);
 
-		// TODO: Temporarily disabled singleton registration for debugging
 		// Create and register the PhysicsServer4D singleton for GDScript
 		// Note: Using memnew is correct for Godot objects
-		// physics_server_4d_singleton = memnew(PhysicsServer4DGodot);
-		// if (physics_server_4d_singleton && Engine::get_singleton()) {
-		// 	Engine::get_singleton()->register_singleton("PhysicsServer4D", physics_server_4d_singleton);
-		// }
+		physics_server_4d_singleton = memnew(PhysicsServer4DGodot);
+		if (physics_server_4d_singleton && Engine::get_singleton()) {
+			Engine::get_singleton()->register_singleton("PhysicsServer4D", physics_server_4d_singleton);
+		}
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
