@@ -22,8 +22,7 @@ void StaticBody4D::_ready() {
 	// Set initial transform from Node4D's transform_4d
 	server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform_4d);
 
-	// Update 3D position for rendering (inherited from Node4D)
-	_update_3d_position();
+	// Note: 3D visualization should be handled by a separate visualization system or child Node3D
 }
 
 void StaticBody4D::_exit_tree() {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/vector4.hpp>
 #include "math/transform4d.h"
@@ -10,16 +10,13 @@ using namespace godot;
 /// Node4D — Base class for all 4D spatial nodes.
 ///
 /// Similar to Node2D and Node3D, but operates in 4D space.
-/// Inherits from Node3D to integrate with Godot's scene tree and 3D rendering.
-/// The 3D position is a projection/slice of the 4D position.
-class Node4D : public Node3D {
-	GDCLASS(Node4D, Node3D)
+/// Inherits from Node as a standalone spatial node type for 4D.
+/// Can optionally sync with a child Node3D for 3D visualization.
+class Node4D : public Node {
+	GDCLASS(Node4D, Node)
 
 protected:
 	Transform4D transform_4d;
-
-	// Internal helper to sync 3D position from 4D
-	void _update_3d_position();
 
 public:
 	Node4D();

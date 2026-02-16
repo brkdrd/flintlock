@@ -50,7 +50,7 @@ func _ready() -> void:
 	add_child(node4d)
 	node4d.set_position_4d(Vector4(5.0, 6.0, 7.0, 8.0))
 	print("✓ Node4D position: ", node4d.get_position_4d())
-	print("  3D position (projection): ", node4d.get_position())
+	print("  Individual components - X:", node4d.get_position_4d_x(), " Y:", node4d.get_position_4d_y(), " Z:", node4d.get_position_4d_z(), " W:", node4d.get_position_4d_w())
 	node4d.translate_4d(Vector4(1.0, 1.0, 1.0, 1.0))
 	print("✓ After translate_4d: ", node4d.get_position_4d())
 

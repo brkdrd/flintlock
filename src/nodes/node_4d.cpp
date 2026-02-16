@@ -8,18 +8,10 @@ Node4D::Node4D() {
 Node4D::~Node4D() {
 }
 
-void Node4D::_update_3d_position() {
-	// Project 4D position to 3D by using X, Y, Z components
-	// (W component is not visible in 3D space)
-	Vector3 pos_3d(transform_4d.origin.x, transform_4d.origin.y, transform_4d.origin.z);
-	set_position(pos_3d);
-}
-
 // -- Transform4D access ------------------------------------------------------
 
 void Node4D::set_transform_4d(const Transform4D &p_transform) {
 	transform_4d = p_transform;
-	_update_3d_position();
 }
 
 Transform4D Node4D::get_transform_4d() const {
@@ -30,7 +22,6 @@ Transform4D Node4D::get_transform_4d() const {
 
 void Node4D::set_position_4d(const Vector4 &p_position) {
 	transform_4d.origin = p_position;
-	_update_3d_position();
 }
 
 Vector4 Node4D::get_position_4d() const {
@@ -41,22 +32,18 @@ Vector4 Node4D::get_position_4d() const {
 
 void Node4D::set_position_4d_x(real_t p_x) {
 	transform_4d.origin.x = p_x;
-	_update_3d_position();
 }
 
 void Node4D::set_position_4d_y(real_t p_y) {
 	transform_4d.origin.y = p_y;
-	_update_3d_position();
 }
 
 void Node4D::set_position_4d_z(real_t p_z) {
 	transform_4d.origin.z = p_z;
-	_update_3d_position();
 }
 
 void Node4D::set_position_4d_w(real_t p_w) {
 	transform_4d.origin.w = p_w;
-	// W doesn't affect 3D position, so no need to update
 }
 
 real_t Node4D::get_position_4d_x() const {
@@ -79,17 +66,12 @@ real_t Node4D::get_position_4d_w() const {
 
 void Node4D::translate_4d(const Vector4 &p_offset) {
 	transform_4d.origin = transform_4d.origin + p_offset;
-	_update_3d_position();
 }
 
 // -- Godot lifecycle ---------------------------------------------------------
 
 void Node4D::_notification(int p_what) {
-	switch (p_what) {
-		case NOTIFICATION_ENTER_TREE:
-			_update_3d_position();
-			break;
-	}
+	// Reserved for future use
 }
 
 // -- Bind methods ------------------------------------------------------------

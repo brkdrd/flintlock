@@ -41,8 +41,7 @@ void RigidBody4D::_physics_process(double p_delta) {
 
 	linear_velocity = server->body_get_state(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY);
 
-	// Update 3D position for rendering (inherited from Node4D)
-	_update_3d_position();
+	// Note: 3D visualization should be handled by a separate visualization system or child Node3D
 }
 
 void RigidBody4D::_exit_tree() {
