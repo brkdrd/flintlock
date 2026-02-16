@@ -130,31 +130,44 @@ CMake is available as an alternative (`CMakeLists.txt`).
 
 ## Current State
 
-Stage 1 (Math4D) is **in progress**. The following classes are implemented and passing tests:
+### Completed: Foundation & Core Classes
 
-| Class | Header | Status | Tests |
-|---|---|---|---|
-| `Vector4D` | `src/math/vector4d.h/.cpp` | **Done** | 32 tests, 104 assertions passing |
-| `Basis4D` | `src/math/basis4d.h/.cpp` | **Done** | 7 tests passing (identity, rotation, multiplication, inverse, determinant) |
-| `Transform4D` | `src/math/transform4d.h/.cpp` | **Done** | 7 tests passing (identity, translation, composition, inverse) |
-| `AABB4D` | `src/math/aabb4d.h/.cpp` | **Done** | 9 tests passing (containment, intersection, merge, grow, volume) |
-| `Rotor4D` | `src/math/rotor4d.h/.cpp` | **WIP** | `to_basis()` conversion produces incorrect matrix; 6 of 9 tests failing. The geometric product, conjugate, norm, slerp, and from_plane_angle are implemented but the sandwich-product rotation (via `to_basis()`) has sign/coefficient errors that need debugging. |
-| `Hyperplane4D` | `src/math/hyperplane4d.h/.cpp` | **Not started** | — |
-| `math_defs_4d.h` | `src/math/math_defs_4d.h` | **Done** | Provides conditional includes for godot-cpp vs test compat shim |
+**Math4D** (Stage 1):
+- ✅ `Vector4D`, `Basis4D`, `Transform4D`, `AABB4D` — fully tested and working
+- ⚠️ `Rotor4D` — `to_basis()` bug (6/9 tests failing, needs rederivation)
+- ❌ `Hyperplane4D` — not yet implemented
+
+**PhysicsServer4D**:
+- ✅ Singleton server inheriting from `godot::Object` (proper Godot pattern)
+- ✅ Uses `godot::RID` throughout (no custom RID wrapper)
+- ✅ Registered as Engine singleton, accessible from GDScript
+- ✅ Fully bound with `_bind_methods()` for GDScript integration
+
+**Node Hierarchy** (follows Godot's CollisionObject3D → PhysicsBody3D pattern):
+```
+Node
+└─ Node4D (4D spatial base)
+    ├─ CollisionObject4D ❌ NOT YET IMPLEMENTED
+    │   ├─ PhysicsBody4D ✅ DONE
+    │   │   ├─ StaticBody4D ✅ DONE
+    │   │   ├─ CharacterBody4D ✅ DONE
+    │   │   └─ RigidBody4D ✅ DONE
+    │   └─ Area4D ✅ DONE (should inherit from CollisionObject4D)
+    └─ CollisionShape4D ✅ DONE (should be child of CollisionObject4D)
+```
+
+**Shape Resources**:
+- ✅ `HyperSphereShape4DResource`, `HyperBoxShape4DResource`
+- ✅ `HyperCapsuleShape4DResource`, `HyperEllipsoidShape4DResource`
+- ✅ `ConvexHull4DResource`
 
 ### Known Issues
 
-- **Rotor4D `to_basis()` bug**: The matrix produced by `to_basis()` for an XY-plane
-  90-degree rotor (s=0.707, e12=-0.707) gives `[[1,-1,0,0],[1,0,0,0],...]` instead
-  of the expected `[[0,-1,0,0],[1,0,0,0],...]`. The diagonal elements are wrong,
-  suggesting the squared-term formula in `to_basis()` needs rederivation. The
-  `rotate()` method delegates to `to_basis()`, so all rotation tests fail.
-
-### What's Left for Stage 1
-
-1. Fix `Rotor4D::to_basis()` — rederive the 4x4 matrix from the sandwich product
-2. Implement `Hyperplane4D` (no pre-written test in `tests/math/`, but tested in `tests/slicer/test_hyperplane.cpp`)
-3. All earlier-stage tests remain green (55 of 64 total tests pass; 9 are Rotor4D)
+1. **Missing CollisionObject4D**: Current hierarchy skips this base class. `PhysicsBody4D` and `Area4D` should both inherit from `CollisionObject4D` (see requirements below).
+2. **Rotor4D bug**: `to_basis()` produces incorrect matrices (sign/coefficient errors).
+3. **No visual nodes**: Missing `VisualInstance4D`, `GeometryInstance4D`, `MeshInstance4D` for rendering.
+4. **No Camera4D**: No 4D camera to define hyperplane slicing viewpoint.
+5. **Slicer incomplete**: Cannot generate 3D meshes from 4D shapes for rendering.
 
 ## Testing
 
@@ -173,3 +186,126 @@ use `__has_include` in `math_defs_4d.h` to conditionally pick the right types.
 
 Test files per stage are listed in `IMPLEMENTATION_PLAN.md`. Currently only Stage 1
 math tests are enabled in `tests/CMakeLists.txt`.
+
+## Required Class Hierarchy
+
+To properly mirror Godot's 3D architecture, implement the following hierarchy:
+
+### Physics Hierarchy (mirrors Godot 3D)
+
+```
+Node
+└─ Node4D (base for all 4D spatial nodes)
+    └─ CollisionObject4D (base for all collision-aware nodes)
+        ├─ PhysicsBody4D (base for physics-enabled bodies)
+        │   ├─ StaticBody4D (immovable, no forces)
+        │   ├─ CharacterBody4D (kinematic, script-controlled)
+        │   └─ RigidBody4D (dynamic, physics-driven)
+        └─ Area4D (trigger volumes, spatial queries)
+```
+
+**CollisionObject4D Requirements**:
+- Inherit from `Node4D`
+- Properties: `collision_layer`, `collision_mask`, `collision_priority`
+- Methods: `get_rid()`, shape owner management
+- Signals: `body_entered`, `body_exited`, `area_entered`, `area_exited`
+- Both `PhysicsBody4D` and `Area4D` must inherit from this
+
+**CollisionShape4D**:
+- Child node of `CollisionObject4D` (or subclasses)
+- Property: `shape` (Shape4DResource)
+- Property: `disabled` (bool)
+- On `_ready()`: attach shape to parent's physics body via `PhysicsServer4D`
+
+### Visual Hierarchy (for rendering/slicing)
+
+```
+Node
+└─ Node4D
+    └─ VisualInstance4D (base for all visible 4D nodes)
+        ├─ GeometryInstance4D (geometry-based rendering)
+        │   └─ MeshInstance4D (renders 4D meshes, sliced to 3D)
+        └─ Camera4D (defines hyperplane slice viewpoint)
+```
+
+**VisualInstance4D Requirements**:
+- Inherit from `Node4D`
+- Properties: `visible`, `layers` (render layer mask)
+- Integrates with slicer to generate 3D cross-sections
+
+**Camera4D Requirements**:
+- Defines the **hyperplane slice** for rendering
+- Properties:
+  - `hyperplane_position` (Vector4) — point on hyperplane
+  - `hyperplane_normal` (Vector4) — normal vector (default: W-axis)
+  - `fov` (float) — 3D field of view after slicing
+  - `near`, `far` (float) — clipping planes
+  - `current` (bool) — active camera
+- Methods:
+  - `make_current()` — activate this camera
+  - `get_hyperplane()` → Hyperplane4D
+
+**MeshInstance4D Requirements**:
+- Property: `mesh_4d` (Mesh4DResource) — 4D mesh data
+- On `_process()`: request 3D slice from slicer, create 3D `MeshInstance3D` child
+- Slicer generates 3D mesh by intersecting 4D polytope with camera's hyperplane
+
+## Slicer Requirements
+
+The **Hyperplane Slicer** must:
+
+1. **Input**:
+   - 4D shape/mesh (vertices, faces, cells)
+   - Hyperplane definition (point + normal from `Camera4D`)
+
+2. **Process**:
+   - For each 4D cell (tetrahedron/polytope):
+     - Classify vertices (above/below/on hyperplane)
+     - Clip edges that cross the hyperplane
+     - Triangulate the resulting 3D polygon
+   - Generate 3D mesh (vertices, normals, UVs)
+
+3. **Output**:
+   - 3D `ArrayMesh` suitable for `MeshInstance3D`
+   - Transform to position slice correctly in 3D space
+
+4. **Integration**:
+   - Called automatically for all `VisualInstance4D` nodes within camera frustum
+   - Cached per frame (only regenerate when 4D transforms change)
+   - Must handle:
+     - `HyperSphereShape4D` → sphere/ellipse slice
+     - `HyperBoxShape4D` → convex polygon slice
+     - `ConvexHull4D` → general convex polygon slice
+     - Custom 4D meshes → arbitrary 3D cross-sections
+
+**Slicer API** (in `src/slicer/`):
+```cpp
+class Slicer4D {
+public:
+    // Slice a 4D shape against a hyperplane
+    static Ref<ArrayMesh> slice_shape(
+        const Shape4D* shape,
+        const Hyperplane4D& plane,
+        const Transform4D& transform
+    );
+
+    // Slice a 4D mesh
+    static Ref<ArrayMesh> slice_mesh(
+        const Mesh4DResource* mesh,
+        const Hyperplane4D& plane,
+        const Transform4D& transform
+    );
+};
+```
+
+## Implementation Priority
+
+1. **Fix Rotor4D** — required for correct 4D rotations
+2. **Implement Hyperplane4D** — needed by slicer and Camera4D
+3. **Add CollisionObject4D** — fix hierarchy (PhysicsBody4D/Area4D inherit from it)
+4. **Implement Camera4D** — defines viewing hyperplane
+5. **Implement VisualInstance4D/MeshInstance4D** — rendering foundation
+6. **Implement Slicer4D** — generate 3D meshes from 4D geometry
+7. **Basic 4D → 3D rendering loop** — integrate slicer with scene tree
+
+Without these, the 4D physics will run but produce no visible output.
