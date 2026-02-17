@@ -10,6 +10,14 @@
 #include "math/hyperplane4d.h"
 #include "math/transform4d.h"
 
+#if __has_include(<godot_cpp/variant/array.hpp>)
+#include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
+#include <godot_cpp/classes/mesh.hpp>
+using namespace godot;
+#endif
+
 /// Slicer4D — Main dispatcher for slicing 4D shapes with hyperplanes.
 ///
 /// Routes to appropriate specialized slicer based on shape type.
@@ -23,6 +31,13 @@ public:
 		const Transform4D &p_transform,
 		const Hyperplane4D &p_hyperplane
 	);
+
+#if __has_include(<godot_cpp/variant/array.hpp>)
+	/// Convert a SliceResult to a Godot surface arrays Array ready for
+	/// RS::mesh_add_surface_from_arrays. Returns an empty Array if the slice
+	/// is empty. The returned Array has Mesh::ARRAY_MAX elements.
+	static Array build_surface_arrays(const SliceResult &p_result);
+#endif
 
 	/// Slice a hypersphere (analytic)
 	static SliceResult slice_sphere(

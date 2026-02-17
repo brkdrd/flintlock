@@ -135,7 +135,7 @@ CMake is available as an alternative (`CMakeLists.txt`).
 **Math4D** (Stage 1):
 - ✅ `Vector4D`, `Basis4D`, `Transform4D`, `AABB4D` — fully tested and working
 - ⚠️ `Rotor4D` — `to_basis()` bug (6/9 tests failing, needs rederivation)
-- ❌ `Hyperplane4D` — not yet implemented
+- ⚠️ `Hyperplane4D` — implemented but `get_tangent_basis()` stability unverified (blocker for Camera4D)
 
 **PhysicsServer4D**:
 - ✅ Singleton server inheriting from `godot::Object` (proper Godot pattern)
@@ -222,90 +222,179 @@ Node
 ```
 Node
 └─ Node4D
-    └─ VisualInstance4D (base for all visible 4D nodes)
-        ├─ GeometryInstance4D (geometry-based rendering)
-        │   └─ MeshInstance4D (renders 4D meshes, sliced to 3D)
-        └─ Camera4D (defines hyperplane slice viewpoint)
+    ├─ Camera4D                    (defines hyperplane + drives render loop)
+    └─ VisualInstance4D            (base for all visible 4D objects)
+        └─ GeometryInstance4D      (adds material, shadow, LOD)
+            └─ MeshInstance4D      (holds Shape4DResource, sliced each frame)
 ```
 
 **VisualInstance4D Requirements**:
 - Inherit from `Node4D`
-- Properties: `visible`, `layers` (render layer mask)
-- Integrates with slicer to generate 3D cross-sections
+- Properties: `visible` (bool), `layers` (uint32_t render layer mask)
+- Owns a `RID instance_rid` (via `RS::instance_create()`) and `RID mesh_rid` (via `RS::mesh_create()`)
+- **No `MeshInstance3D` child nodes** — uses RenderingServer RIDs directly, mirroring how Godot's own `VisualInstance3D` works
+- `NOTIFICATION_ENTER_TREE`: `RS::instance_set_scenario(instance_rid, get_viewport()->find_world_3d()->get_scenario())`
+- `NOTIFICATION_EXIT_TREE`: `RS::instance_set_scenario(instance_rid, RID())`
+- Destructor: `RS::free(instance_rid)`, `RS::free(mesh_rid)`
+- Internal method called by `Camera4D` each frame: `update_render_data(const Array &surface_arrays, const Transform3D &slice_transform)`
+  - Calls `RS::mesh_clear(mesh_rid)`, `RS::mesh_add_surface_from_arrays(...)`, `RS::instance_set_base(instance_rid, mesh_rid)`, `RS::instance_set_transform(instance_rid, slice_transform)`
+- Adds self to SceneTree group `"visual_4d"` on enter, removes on exit
 
-**Camera4D Requirements**:
-- Defines the **hyperplane slice** for rendering
-- Properties:
-  - `hyperplane_position` (Vector4) — point on hyperplane
-  - `hyperplane_normal` (Vector4) — normal vector (default: W-axis)
-  - `fov` (float) — 3D field of view after slicing
-  - `near`, `far` (float) — clipping planes
-  - `current` (bool) — active camera
-- Methods:
-  - `make_current()` — activate this camera
-  - `get_hyperplane()` → Hyperplane4D
+**GeometryInstance4D Requirements**:
+- Inherit from `VisualInstance4D`
+- Property: `material` (`Ref<Material>`) — applied to the slice via `RS::instance_geometry_set_material_override(instance_rid, material->get_rid())`
+- Material is set once on change, not every frame
 
 **MeshInstance4D Requirements**:
-- Property: `mesh_4d` (Mesh4DResource) — 4D mesh data
-- On `_process()`: request 3D slice from slicer, create 3D `MeshInstance3D` child
-- Slicer generates 3D mesh by intersecting 4D polytope with camera's hyperplane
+- Inherit from `GeometryInstance4D`
+- Property: `shape` (`Ref<Shape4DResource>`) — reuses existing physics shape resources
+- No logic of its own — `Camera4D` reads `shape->get_shape()` and `get_transform_4d()` each frame
+
+**Camera4D Requirements**:
+
+Camera4D is a `Node4D` that owns a `RenderingServer` camera RID and drives the per-frame
+slicing loop. It does **not** inherit from `Camera3D` and does **not** create child nodes.
+It manages everything through RIDs, mirroring how `Camera3D` works internally.
+
+**Hyperplane derivation** — fully derived from Camera4D's own `Transform4D`:
+- `normal = transform_4d.basis.get_column(3).normalized()` — the W-basis column
+- `point  = transform_4d.origin` — the 4D position
+
+Moving `position_4d_w` shifts which depth is sliced. Rotating the 4D basis (e.g. via
+`Rotor4D`) tilts the hyperplane. No separate `hyperplane_position`/`hyperplane_normal`
+properties are needed — the transform is the single source of truth.
+
+**Properties**:
+
+| Property | Type    | Default | Description                          |
+|----------|---------|---------|--------------------------------------|
+| `fov`    | float   | 75.0    | 3D field of view (degrees)           |
+| `near`   | float   | 0.05    | Near clipping plane                  |
+| `far`    | float   | 4000.0  | Far clipping plane                   |
+| `current`| bool    | false   | Whether this is the active camera    |
+
+**Methods**:
+- `make_current()` — calls `RS::viewport_attach_camera(get_viewport()->get_viewport_rid(), camera_rid)`
+- `clear_current()` — calls `RS::viewport_attach_camera(..., RID())`
+- `is_current() const` — returns `current` flag
+- `get_hyperplane() const` → `Hyperplane4D` — computed from `transform_4d`
+- `get_camera_rid() const` → `RID` — the RenderingServer camera handle
+
+**Lifecycle**:
+- Constructor: `camera_rid = RS::camera_create()`, `RS::camera_set_perspective(camera_rid, fov, near, far)`
+- `NOTIFICATION_ENTER_TREE`: if `current`, call `make_current()`; add to group `"cameras_4d"`
+- `NOTIFICATION_EXIT_TREE`: `clear_current()`, remove from group
+- Destructor: `RS::free(camera_rid)`
+- Property setters for `fov`/`near`/`far`: immediately call `RS::camera_set_perspective(camera_rid, ...)`
+
+**Per-frame render loop** (`_process(double delta)`):
+1. Compute `Hyperplane4D plane = get_hyperplane()`
+2. Compute `Transform3D slice_transform` from tangent basis (see Coordinate Frame below)
+3. `RS::camera_set_transform(camera_rid, derive_camera_3d_transform())`
+4. For each node in group `"visual_4d"`:
+   - Cast to `VisualInstance4D`; skip if not visible
+   - `shape  = mesh_instance->get_shape()->get_shape()`
+   - `xform  = instance->get_transform_4d()`
+   - `result = Slicer4D::slice_shape(shape, xform, plane)`
+   - `arrays = Slicer4D::build_surface_arrays(result)` — returns `Array`, not `Ref<ArrayMesh>`
+   - `instance->update_render_data(arrays, slice_transform)`
+
+**Camera 3D transform derivation**:
+```
+// xyz of the camera's 4D position becomes the 3D camera position
+Vector3 origin_3d(transform_4d.origin.x, transform_4d.origin.y, transform_4d.origin.z);
+
+// Upper-left 3×3 of the 4D basis becomes the 3D camera orientation
+Basis basis_3d = extract_3x3_basis(transform_4d.basis);
+
+RS::camera_set_transform(camera_rid, Transform3D(basis_3d, origin_3d));
+```
+
+**Coordinate Frame: Hyperplane → 3D World**:
+
+The slicer outputs vertices in the hyperplane's local tangent frame (t1, t2, t3 from
+`Hyperplane4D::get_tangent_basis()`). These map to Godot's 3D world axes via:
+
+```cpp
+Vector4 t1, t2, t3;
+plane.get_tangent_basis(&t1, &t2, &t3);
+
+// Project each tangent vector's XYZ components to get 3D world axes
+Basis basis_3d(Vector3(t1.x, t1.y, t1.z),
+               Vector3(t2.x, t2.y, t2.z),
+               Vector3(t3.x, t3.y, t3.z));
+
+Transform3D slice_transform(basis_3d, Vector3(0, 0, 0));
+```
+
+For the default case (normal = W-axis), the tangent basis is the standard XYZ axes so
+`basis_3d` is identity — zero overhead.
+
+**Tangent basis stability (blocker)**:
+`Hyperplane4D::get_tangent_basis()` must use Gram-Schmidt orthogonalization with a fixed
+priority axis order (choose the 4D world axis *least* parallel to the normal as the seed).
+This prevents the basis from flipping between frames when the normal rotates. Must be
+verified before Camera4D can produce stable output.
 
 ## Slicer Requirements
 
 The **Hyperplane Slicer** must:
 
 1. **Input**:
-   - 4D shape/mesh (vertices, faces, cells)
-   - Hyperplane definition (point + normal from `Camera4D`)
+   - 4D shape (via `Shape4D*` from `Shape4DResource::get_shape()`)
+   - Hyperplane definition (from `Camera4D::get_hyperplane()`)
+   - Shape's world `Transform4D`
 
 2. **Process**:
    - For each 4D cell (tetrahedron/polytope):
      - Classify vertices (above/below/on hyperplane)
      - Clip edges that cross the hyperplane
      - Triangulate the resulting 3D polygon
-   - Generate 3D mesh (vertices, normals, UVs)
+   - Generate 3D mesh (vertices, normals)
 
 3. **Output**:
-   - 3D `ArrayMesh` suitable for `MeshInstance3D`
-   - Transform to position slice correctly in 3D space
+   - `SliceResult` (existing) — vertices and indices in hyperplane-local tangent frame
+   - `Array build_surface_arrays(result)` — converts `SliceResult` to a Godot surface
+     arrays `Array` (sized `Mesh::ARRAY_MAX`) ready for `RS::mesh_add_surface_from_arrays`.
+     Returns a raw `Array`, **not** a `Ref<ArrayMesh>`, to avoid heap allocation per frame.
 
 4. **Integration**:
-   - Called automatically for all `VisualInstance4D` nodes within camera frustum
-   - Cached per frame (only regenerate when 4D transforms change)
+   - Called by `Camera4D::_process()` for every visible `VisualInstance4D` each frame
    - Must handle:
      - `HyperSphereShape4D` → sphere/ellipse slice
      - `HyperBoxShape4D` → convex polygon slice
      - `ConvexHull4D` → general convex polygon slice
-     - Custom 4D meshes → arbitrary 3D cross-sections
 
 **Slicer API** (in `src/slicer/`):
 ```cpp
 class Slicer4D {
 public:
-    // Slice a 4D shape against a hyperplane
-    static Ref<ArrayMesh> slice_shape(
-        const Shape4D* shape,
-        const Hyperplane4D& plane,
-        const Transform4D& transform
+    // Slice a 4D shape — existing, unchanged
+    static SliceResult slice_shape(
+        const Shape4D *shape,
+        const Transform4D &transform,
+        const Hyperplane4D &plane
     );
 
-    // Slice a 4D mesh
-    static Ref<ArrayMesh> slice_mesh(
-        const Mesh4DResource* mesh,
-        const Hyperplane4D& plane,
-        const Transform4D& transform
-    );
+    // NEW: Convert SliceResult to Godot surface arrays for RS::mesh_add_surface_from_arrays
+    // Returns Array sized Mesh::ARRAY_MAX. Returns empty Array if result.is_empty().
+    static Array build_surface_arrays(const SliceResult &result);
 };
 ```
 
 ## Implementation Priority
 
 1. **Fix Rotor4D** — required for correct 4D rotations
-2. **Implement Hyperplane4D** — needed by slicer and Camera4D
-3. **Add CollisionObject4D** — fix hierarchy (PhysicsBody4D/Area4D inherit from it)
-4. **Implement Camera4D** — defines viewing hyperplane
-5. **Implement VisualInstance4D/MeshInstance4D** — rendering foundation
-6. **Implement Slicer4D** — generate 3D meshes from 4D geometry
-7. **Basic 4D → 3D rendering loop** — integrate slicer with scene tree
+2. **Stabilise `Hyperplane4D::get_tangent_basis()`** — must use Gram-Schmidt with fixed
+   priority axis order; blocker for Camera4D producing stable output
+3. **Add `Slicer4D::build_surface_arrays()`** — converts `SliceResult` to Godot surface
+   arrays `Array`; needed by Camera4D render loop
+4. **Implement `VisualInstance4D` / `GeometryInstance4D` / `MeshInstance4D`** — RID-based,
+   no `MeshInstance3D` children; registers to group `"visual_4d"`
+5. **Implement `Camera4D`** — owns `RID camera_rid`, drives per-frame slicing loop,
+   calls `RS::viewport_attach_camera` for `make_current()`
+6. **Add CollisionObject4D** — fix physics hierarchy (PhysicsBody4D/Area4D inherit from it)
+7. **Basic rendering integration test** — one `MeshInstance4D` + one `Camera4D`, confirm
+   slice appears in the Godot viewport
 
-Without these, the 4D physics will run but produce no visible output.
+Without steps 1–5, the 4D physics will run but produce no visible output.

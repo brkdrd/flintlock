@@ -118,20 +118,20 @@ void CharacterBody4D::_ready() {
 	}
 
 	// Create physics body in the server
-	body_rid = server->body_create();
-	server->body_set_mode(body_rid, PhysicsServer4D::BODY_MODE_KINEMATIC);
+	base_rid = server->body_create();
+	server->body_set_mode(base_rid, PhysicsServer4D::BODY_MODE_KINEMATIC);
 
 	// Set initial transform
-	server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform_4d);
+	server->body_set_state(base_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform_4d);
 
 	// TODO: Add to space when implemented
 }
 
 void CharacterBody4D::_exit_tree() {
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (server && body_rid.is_valid()) {
-		server->free_rid(body_rid);
-		body_rid = RID();
+	if (server && base_rid.is_valid()) {
+		server->free_rid(base_rid);
+		base_rid = RID();
 	}
 }
 

@@ -91,43 +91,48 @@ bool Hyperplane4D::intersects_segment(const Vector4 &p_from, const Vector4 &p_to
 // -- Tangent basis -----------------------------------------------------------
 
 void Hyperplane4D::get_tangent_basis(Vector4 *r_t1, Vector4 *r_t2, Vector4 *r_t3) const {
-	// Construct an orthonormal basis for the 3D hyperplane.
-	// Use Gram-Schmidt to generate 3 vectors orthogonal to the normal.
+	// Construct an orthonormal basis for the 3D hyperplane using Gram-Schmidt.
+	// Uses a fixed priority axis order to prevent basis flipping between frames:
+	// always choose the world axis LEAST parallel to the normal as the seed,
+	// breaking ties by the fixed order X > Y > Z > W (lowest index wins).
 
-	// Start with arbitrary non-parallel vector
-	Vector4 candidate1;
-	if (abs(normal.x) < 0.9) {
-		candidate1 = Vector4(1, 0, 0, 0);
-	} else {
-		candidate1 = Vector4(0, 1, 0, 0);
+	const Vector4 world_axes[4] = {
+		Vector4(1, 0, 0, 0),
+		Vector4(0, 1, 0, 0),
+		Vector4(0, 0, 1, 0),
+		Vector4(0, 0, 0, 1),
+	};
+
+	// Sort axis indices by ascending |normal · axis|.  Ties keep original order.
+	int order[4] = { 0, 1, 2, 3 };
+	real_t abs_d[4] = {
+		std::abs(normal.x), std::abs(normal.y),
+		std::abs(normal.z), std::abs(normal.w)
+	};
+	// Simple insertion sort (4 elements — no overhead).
+	for (int i = 1; i < 4; i++) {
+		int key = order[i];
+		int j = i - 1;
+		while (j >= 0 && abs_d[order[j]] > abs_d[key]) {
+			order[j + 1] = order[j];
+			j--;
+		}
+		order[j + 1] = key;
 	}
 
-	// First tangent: orthogonalize candidate1 against normal
-	Vector4 t1 = candidate1 - normal * normal.dot(candidate1);
+	// First tangent: seed from the axis most orthogonal to normal.
+	Vector4 t1 = world_axes[order[0]];
+	t1 = t1 - normal * normal.dot(t1);
 	t1 = t1.normalized();
 
-	// Second tangent: use another arbitrary vector
-	Vector4 candidate2;
-	if (abs(normal.y) < 0.9) {
-		candidate2 = Vector4(0, 1, 0, 0);
-	} else {
-		candidate2 = Vector4(0, 0, 1, 0);
-	}
-
-	// Orthogonalize against normal and t1
-	Vector4 t2 = candidate2 - normal * normal.dot(candidate2) - t1 * t1.dot(candidate2);
+	// Second tangent: seed from the next most orthogonal axis.
+	Vector4 t2 = world_axes[order[1]];
+	t2 = t2 - normal * normal.dot(t2) - t1 * t1.dot(t2);
 	t2 = t2.normalized();
 
-	// Third tangent: use yet another arbitrary vector
-	Vector4 candidate3;
-	if (abs(normal.z) < 0.9) {
-		candidate3 = Vector4(0, 0, 1, 0);
-	} else {
-		candidate3 = Vector4(0, 0, 0, 1);
-	}
-
-	// Orthogonalize against normal, t1, and t2
-	Vector4 t3 = candidate3 - normal * normal.dot(candidate3) - t1 * t1.dot(candidate3) - t2 * t2.dot(candidate3);
+	// Third tangent: seed from the next axis.
+	Vector4 t3 = world_axes[order[2]];
+	t3 = t3 - normal * normal.dot(t3) - t1 * t1.dot(t3) - t2 * t2.dot(t3);
 	t3 = t3.normalized();
 
 	if (r_t1) *r_t1 = t1;

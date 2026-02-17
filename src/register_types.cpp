@@ -8,12 +8,18 @@
 
 // Include our Godot-facing classes
 #include "nodes/node_4d.h"
+#include "nodes/collision_object_4d.h"
 #include "nodes/physics_body_4d.h"
 #include "nodes/rigid_body_4d.h"
 #include "nodes/static_body_4d.h"
 #include "nodes/character_body_4d.h"
 #include "nodes/area_4d.h"
 #include "nodes/collision_shape_4d.h"
+#include "nodes/visual_instance_4d.h"
+#include "nodes/geometry_instance_4d.h"
+#include "nodes/mesh_instance_4d.h"
+#include "nodes/camera_4d.h"
+#include "resources/shape_4d_resource_base.h"
 #include "resources/hyper_sphere_shape_4d_resource.h"
 #include "resources/hyper_box_shape_4d_resource.h"
 #include "resources/hyper_capsule_shape_4d_resource.h"
@@ -35,7 +41,6 @@ void initialize_flintlock_module(ModuleInitializationLevel p_level)
 		GDREGISTER_CLASS(PhysicsServer4D);
 
 		// Create and register the PhysicsServer4D singleton for GDScript
-		// Note: Using memnew is correct for Godot objects
 		physics_server_4d_singleton = memnew(PhysicsServer4D);
 		if (physics_server_4d_singleton && Engine::get_singleton()) {
 			Engine::get_singleton()->register_singleton("PhysicsServer4D", physics_server_4d_singleton);
@@ -43,18 +48,26 @@ void initialize_flintlock_module(ModuleInitializationLevel p_level)
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
-		// Register base node classes
+		// Register base node classes (order matters for inheritance).
 		GDREGISTER_CLASS(Node4D);
+		GDREGISTER_CLASS(CollisionObject4D);
 		GDREGISTER_CLASS(PhysicsBody4D);
 
-		// Register physics body node classes
+		// Register physics body node classes.
 		GDREGISTER_CLASS(RigidBody4D);
 		GDREGISTER_CLASS(StaticBody4D);
 		GDREGISTER_CLASS(CharacterBody4D);
 		GDREGISTER_CLASS(Area4D);
 		GDREGISTER_CLASS(CollisionShape4D);
 
-		// Register resource classes (shape resources)
+		// Register visual node classes.
+		GDREGISTER_CLASS(VisualInstance4D);
+		GDREGISTER_CLASS(GeometryInstance4D);
+		GDREGISTER_CLASS(MeshInstance4D);
+		GDREGISTER_CLASS(Camera4D);
+
+		// Register resource base and shape resources.
+		GDREGISTER_ABSTRACT_CLASS(Shape4DResourceBase);
 		GDREGISTER_CLASS(HyperSphereShape4DResource);
 		GDREGISTER_CLASS(HyperBoxShape4DResource);
 		GDREGISTER_CLASS(HyperCapsuleShape4DResource);
@@ -65,22 +78,17 @@ void initialize_flintlock_module(ModuleInitializationLevel p_level)
 
 void uninitialize_flintlock_module(ModuleInitializationLevel p_level) {
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
-		// Unregister and cleanup the Godot singleton
 		if (physics_server_4d_singleton) {
 			Engine::get_singleton()->unregister_singleton("PhysicsServer4D");
 			memdelete(physics_server_4d_singleton);
 			physics_server_4d_singleton = nullptr;
 		}
 	}
-
-	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
-		// Cleanup scene resources (if needed)
-	}
 }
 
 extern "C"
 {
-	// Initialization - entry point must match .gdextension file
+	// Initialization — entry point must match .gdextension file
 	GDExtensionBool GDE_EXPORT flintlock_library_init(
 		GDExtensionInterfaceGetProcAddress p_get_proc_address,
 		GDExtensionClassLibraryPtr p_library,

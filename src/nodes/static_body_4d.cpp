@@ -15,21 +15,21 @@ void StaticBody4D::_ready() {
 	}
 
 	// Create physics body in the server
-	body_rid = server->body_create();
-	server->body_set_mode(body_rid, PhysicsServer4D::BODY_MODE_STATIC);
-	server->body_set_param(body_rid, PhysicsServer4D::BODY_PARAM_MASS, 0.0);
+	base_rid = server->body_create();
+	server->body_set_mode(base_rid, PhysicsServer4D::BODY_MODE_STATIC);
+	server->body_set_param(base_rid, PhysicsServer4D::BODY_PARAM_MASS, 0.0);
 
 	// Set initial transform from Node4D's transform_4d
-	server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform_4d);
+	server->body_set_state(base_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform_4d);
 
 	// Note: 3D visualization should be handled by a separate visualization system or child Node3D
 }
 
 void StaticBody4D::_exit_tree() {
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (server && body_rid.is_valid()) {
-		server->free_rid(body_rid);
-		body_rid = RID();
+	if (server && base_rid.is_valid()) {
+		server->free_rid(base_rid);
+		base_rid = RID();
 	}
 }
 

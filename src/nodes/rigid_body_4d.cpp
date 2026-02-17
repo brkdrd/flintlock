@@ -15,40 +15,40 @@ void RigidBody4D::_ready() {
 	}
 
 	// Create physics body in the server
-	body_rid = server->body_create();
-	server->body_set_mode(body_rid, PhysicsServer4D::BODY_MODE_RIGID);
+	base_rid = server->body_create();
+	server->body_set_mode(base_rid, PhysicsServer4D::BODY_MODE_RIGID);
 
 	// Set initial properties
-	server->body_set_param(body_rid, PhysicsServer4D::BODY_PARAM_MASS, mass);
-	server->body_set_param(body_rid, PhysicsServer4D::BODY_PARAM_LINEAR_DAMP, linear_damp);
+	server->body_set_param(base_rid, PhysicsServer4D::BODY_PARAM_MASS, mass);
+	server->body_set_param(base_rid, PhysicsServer4D::BODY_PARAM_LINEAR_DAMP, linear_damp);
 
 	// Set initial transform from Node4D's transform_4d
-	server->body_set_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform_4d);
+	server->body_set_state(base_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, transform_4d);
 
-	server->body_set_state_vector(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY, linear_velocity);
+	server->body_set_state_vector(base_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY, linear_velocity);
 
 	// TODO: Add to space (for now, bodies aren't in a space automatically)
 }
 
 void RigidBody4D::_physics_process(double p_delta) {
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (!server || !body_rid.is_valid()) {
+	if (!server || !base_rid.is_valid()) {
 		return;
 	}
 
 	// Read back the physics state
-	transform_4d = server->body_get_state(body_rid, PhysicsServer4D::BODY_STATE_TRANSFORM);
+	transform_4d = server->body_get_state(base_rid, PhysicsServer4D::BODY_STATE_TRANSFORM);
 
-	linear_velocity = server->body_get_state(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY);
+	linear_velocity = server->body_get_state(base_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY);
 
 	// Note: 3D visualization should be handled by a separate visualization system or child Node3D
 }
 
 void RigidBody4D::_exit_tree() {
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (server && body_rid.is_valid()) {
-		server->free_rid(body_rid);
-		body_rid = RID();
+	if (server && base_rid.is_valid()) {
+		server->free_rid(base_rid);
+		base_rid = RID();
 	}
 }
 
@@ -56,8 +56,8 @@ void RigidBody4D::_exit_tree() {
 void RigidBody4D::set_mass(real_t p_mass) {
 	mass = p_mass;
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (server && body_rid.is_valid()) {
-		server->body_set_param(body_rid, PhysicsServer4D::BODY_PARAM_MASS, mass);
+	if (server && base_rid.is_valid()) {
+		server->body_set_param(base_rid, PhysicsServer4D::BODY_PARAM_MASS, mass);
 	}
 }
 
@@ -69,8 +69,8 @@ real_t RigidBody4D::get_mass() const {
 void RigidBody4D::set_linear_damp(real_t p_damp) {
 	linear_damp = p_damp;
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (server && body_rid.is_valid()) {
-		server->body_set_param(body_rid, PhysicsServer4D::BODY_PARAM_LINEAR_DAMP, linear_damp);
+	if (server && base_rid.is_valid()) {
+		server->body_set_param(base_rid, PhysicsServer4D::BODY_PARAM_LINEAR_DAMP, linear_damp);
 	}
 }
 
@@ -82,8 +82,8 @@ real_t RigidBody4D::get_linear_damp() const {
 void RigidBody4D::set_linear_velocity(const Vector4 &p_velocity) {
 	linear_velocity = p_velocity;
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (server && body_rid.is_valid()) {
-		server->body_set_state_vector(body_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY, linear_velocity);
+	if (server && base_rid.is_valid()) {
+		server->body_set_state_vector(base_rid, PhysicsServer4D::BODY_STATE_LINEAR_VELOCITY, linear_velocity);
 	}
 }
 
@@ -94,15 +94,15 @@ Vector4 RigidBody4D::get_linear_velocity() const {
 // Forces
 void RigidBody4D::apply_impulse(const Vector4 &p_impulse, const Vector4 &p_position) {
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (server && body_rid.is_valid()) {
-		server->body_apply_impulse(body_rid, p_impulse, p_position);
+	if (server && base_rid.is_valid()) {
+		server->body_apply_impulse(base_rid, p_impulse, p_position);
 	}
 }
 
 void RigidBody4D::apply_force(const Vector4 &p_force, const Vector4 &p_position) {
 	PhysicsServer4D *server = PhysicsServer4D::get_singleton();
-	if (server && body_rid.is_valid()) {
-		server->body_apply_force(body_rid, p_force, p_position);
+	if (server && base_rid.is_valid()) {
+		server->body_apply_force(base_rid, p_force, p_position);
 	}
 }
 

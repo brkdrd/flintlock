@@ -85,3 +85,50 @@ SliceResult Slicer4D::slice_hull(
 ) {
 	return PolytopeSlicer::slice(p_hull, p_transform, p_hyperplane);
 }
+
+#if __has_include(<godot_cpp/variant/array.hpp>)
+Array Slicer4D::build_surface_arrays(const SliceResult &p_result) {
+	Array arrays;
+	arrays.resize(Mesh::ARRAY_MAX);
+
+	if (p_result.is_empty()) {
+		return arrays;
+	}
+
+	// Build packed vertex and normal arrays from SliceResult.
+	PackedVector3Array verts;
+	PackedVector3Array norms;
+	PackedInt32Array indices;
+
+	const auto &src_verts = p_result.get_vertices();
+	const auto &src_norms = p_result.get_normals();
+	const auto &src_idx   = p_result.get_indices();
+
+	verts.resize(static_cast<int>(src_verts.size()));
+	for (int i = 0; i < (int)src_verts.size(); i++) {
+		verts[i] = src_verts[i];
+	}
+
+	if (!src_norms.empty()) {
+		norms.resize(static_cast<int>(src_norms.size()));
+		for (int i = 0; i < (int)src_norms.size(); i++) {
+			norms[i] = src_norms[i];
+		}
+	}
+
+	indices.resize(static_cast<int>(src_idx.size()));
+	for (int i = 0; i < (int)src_idx.size(); i++) {
+		indices[i] = src_idx[i];
+	}
+
+	arrays[Mesh::ARRAY_VERTEX] = verts;
+	if (!norms.is_empty()) {
+		arrays[Mesh::ARRAY_NORMAL] = norms;
+	}
+	if (!indices.is_empty()) {
+		arrays[Mesh::ARRAY_INDEX] = indices;
+	}
+
+	return arrays;
+}
+#endif
