@@ -1,0 +1,12 @@
+[configuration]
+entry_symbol = "godot_4d_init"
+compatibility_minimum = "4.3"
+reloadable = true
+
+[libraries]
+linux.debug.x86_64     = "res://addons/godot_4d/bin/libgodot_4d.linux.template_debug.x86_64.so"
+linux.release.x86_64   = "res://addons/godot_4d/bin/libgodot_4d.linux.template_release.x86_64.so"
+windows.debug.x86_64   = "res://addons/godot_4d/bin/libgodot_4d.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/godot_4d/bin/libgodot_4d.windows.template_release.x86_64.dll"
+macos.debug             = "res://addons/godot_4d/bin/libgodot_4d.macos.template_debug.universal.dylib"
+macos.release           = "res://addons/godot_4d/bin/libgodot_4d.macos.template_release.universal.dylib"

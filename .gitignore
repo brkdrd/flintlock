@@ -1,0 +1,55 @@
+# Godot auto generated files
+*.gen.*
+.godot/
+
+# Build outputs
+demo/addons/godot_4d/bin/*.so
+demo/addons/godot_4d/bin/*.dll
+demo/addons/godot_4d/bin/*.dylib
+.sconsign*.dblite
+
+# Ignore custom.py
+custom.py
+
+# Ignore generated compile_commands.json
+compile_commands.json
+
+# Ignore files generated for documentation
+/src/gen
+
+# Binaries
+*.o
+*.os
+*.obj
+*.bc
+*.pyc
+*.dblite
+*.pdb
+*.lib
+*.config
+*.creator
+*.creator.user
+*.files
+*.includes
+*.idb
+*.exp
+
+# Other stuff
+*.log
+
+# VSCode
+.vscode/
+.DS_Store
+
+# Jetbrains
+.idea/
+
+# Cmake
+cmake-build*
+CMakeUserPresets.json
+
+# Test build output
+tests/build/
+
+# Thirdparty tarballs
+/tmp/
