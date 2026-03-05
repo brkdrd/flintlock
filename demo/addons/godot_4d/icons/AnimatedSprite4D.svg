@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Three frames stacked -->
+  <rect x="1" y="5" width="7" height="7" rx="0.5" fill="none" stroke="#fc9c9c" stroke-width="1.2"/>
+  <rect x="4.5" y="3.5" width="7" height="7" rx="0.5" fill="none" stroke="#fc9c9c" stroke-width="1" opacity="0.6"/>
+  <rect x="8" y="2" width="7" height="7" rx="0.5" fill="none" stroke="#fc9c9c" stroke-width="0.8" opacity="0.4"/>
+  <!-- Play arrow -->
+  <polygon points="3,7.5 3,10.5 6,9" fill="#fc9c9c"/>
+  <text x="1" y="15.5" font-size="3.2" fill="#fc9c9c" font-family="sans-serif" font-weight="bold">4D</text>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <line x1="1" y1="4" x2="13" y2="4" stroke="#ffd700" stroke-width="1.5"/>
+  <line x1="1" y1="8" x2="13" y2="8" stroke="#ffd700" stroke-width="1.5"/>
+  <line x1="1" y1="12" x2="13" y2="12" stroke="#ffd700" stroke-width="1.5"/>
+  <polygon points="11,3 14.5,8 11,13" fill="#ffd700"/>
+  <text x="0" y="7" font-size="3" fill="#ffd700" font-family="sans-serif" font-weight="bold">4D</text>
+</svg>

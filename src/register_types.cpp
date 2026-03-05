@@ -7,6 +7,21 @@
 #include "math/aabb4d.h"
 #include "math/plane4d.h"
 #include "math/projection4d.h"
+#include "math/bivector4d.h"
+
+// Resources
+#include "resources/shape_4d.h"
+#include "resources/mesh_4d.h"
+#include "resources/material_4d.h"
+#include "resources/texture_4d.h"
+#include "resources/sprite_frames_4d.h"
+#include "resources/environment_4d.h"
+
+// Servers
+#include "servers/physics/physics_server_4d.h"
+#include "servers/physics/physics_direct_body_state_4d.h"
+#include "servers/physics/physics_direct_space_state_4d.h"
+#include "slicer/slicer_4d.h"
 
 // Node hierarchy
 #include "nodes/node_4d.h"
@@ -38,8 +53,16 @@
 #include "nodes/collision_polygon_4d.h"
 #include "nodes/ray_cast_4d.h"
 
+// Editor (EDITOR level)
+#include "editor/editor_plugin_4d.h"
+#include "editor/inspector_plugin_4d.h"
+#include "editor/gizmo_plugin_4d.h"
+#include "editor/viewport_4d_panel.h"
+
 #include <godot_cpp/core/defs.hpp>
 #include <godot_cpp/godot.hpp>
+#include <godot_cpp/classes/engine.hpp>
+#include <godot_cpp/classes/editor_plugin_registration.hpp>
 
 using namespace godot;
 
@@ -52,6 +75,47 @@ void initialize_godot_4d_module(ModuleInitializationLevel p_level) {
 		ClassDB::register_class<AABB4D>();
 		ClassDB::register_class<Plane4D>();
 		ClassDB::register_class<Projection4D>();
+		ClassDB::register_class<Bivector4D>();
+
+		// Shape resources
+		ClassDB::register_abstract_class<Shape4D>();
+		ClassDB::register_class<BoxShape4D>();
+		ClassDB::register_class<SphereShape4D>();
+		ClassDB::register_class<CapsuleShape4D>();
+		ClassDB::register_class<CylinderShape4D>();
+		ClassDB::register_class<ConvexPolygonShape4D>();
+		ClassDB::register_class<ConcavePolygonShape4D>();
+		ClassDB::register_class<WorldBoundaryShape4D>();
+		ClassDB::register_class<SeparationRayShape4D>();
+
+		// Mesh resources
+		ClassDB::register_abstract_class<Mesh4D>();
+		ClassDB::register_class<ArrayMesh4D>();
+		ClassDB::register_abstract_class<PrimitiveMesh4D>();
+		ClassDB::register_class<HyperBoxMesh4D>();
+		ClassDB::register_class<HyperSphereMesh4D>();
+		ClassDB::register_class<HyperCylinderMesh4D>();
+		ClassDB::register_class<HyperCapsuleMesh4D>();
+
+		// Other resources
+		ClassDB::register_class<Material4D>();
+		ClassDB::register_class<Texture4D>();
+		ClassDB::register_class<SpriteFrames4D>();
+		ClassDB::register_class<Environment4D>();
+
+		// Physics server + state objects
+		ClassDB::register_class<PhysicsServer4D>();
+		ClassDB::register_class<PhysicsDirectBodyState4D>();
+		ClassDB::register_class<PhysicsDirectSpaceState4D>();
+
+		// Register PhysicsServer4D as a singleton
+		PhysicsServer4D *physics_server = memnew(PhysicsServer4D);
+		Engine::get_singleton()->register_singleton("PhysicsServer4D", physics_server);
+
+		// Slicer singleton
+		ClassDB::register_class<Slicer4D>();
+		Slicer4D *slicer = memnew(Slicer4D);
+		Engine::get_singleton()->register_singleton("Slicer4D", slicer);
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
@@ -97,11 +161,30 @@ void initialize_godot_4d_module(ModuleInitializationLevel p_level) {
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
-		// Editor plugins (Stage 9)
+		// Editor integration
+		ClassDB::register_class<EditorPlugin4D>();
+		ClassDB::register_class<EditorInspectorPlugin4D>();
+		ClassDB::register_class<EditorGizmoPlugin4D>();
+		ClassDB::register_class<Viewport4DPanel>();
+		EditorPlugins::add_by_type<EditorPlugin4D>();
 	}
 }
 
-void uninitialize_godot_4d_module(ModuleInitializationLevel p_level) {}
+void uninitialize_godot_4d_module(ModuleInitializationLevel p_level) {
+	if (p_level == MODULE_INITIALIZATION_LEVEL_SERVERS) {
+		// Unregister singletons
+		if (Engine::get_singleton()->has_singleton("PhysicsServer4D")) {
+			Object *obj = Engine::get_singleton()->get_singleton("PhysicsServer4D");
+			Engine::get_singleton()->unregister_singleton("PhysicsServer4D");
+			memdelete(obj);
+		}
+		if (Engine::get_singleton()->has_singleton("Slicer4D")) {
+			Object *obj = Engine::get_singleton()->get_singleton("Slicer4D");
+			Engine::get_singleton()->unregister_singleton("Slicer4D");
+			memdelete(obj);
+		}
+	}
+}
 
 extern "C" {
 GDExtensionBool GDE_EXPORT godot_4d_init(

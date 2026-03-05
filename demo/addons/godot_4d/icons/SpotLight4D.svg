@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Light source -->
+  <circle cx="3" cy="8" r="2" fill="#ffd700"/>
+  <!-- Cone beam -->
+  <polygon points="5,8 14,3 14,13" fill="#ffd700" opacity="0.5"/>
+  <line x1="5" y1="8" x2="14" y2="3" stroke="#ffd700" stroke-width="1.2"/>
+  <line x1="5" y1="8" x2="14" y2="13" stroke="#ffd700" stroke-width="1.2"/>
+  <!-- Extra axis for 4D -->
+  <line x1="1" y1="2" x2="3" y2="4" stroke="#ffd700" stroke-width="1" stroke-dasharray="1.5,1"/>
+  <text x="0" y="15.5" font-size="3.2" fill="#ffd700" font-family="sans-serif" font-weight="bold">4D</text>
+</svg>

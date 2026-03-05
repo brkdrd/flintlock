@@ -1,15 +1,25 @@
 #pragma once
 
+#include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/core/class_db.hpp>
-#include "physics_body_4d.h"
+#include "static_body_4d.h"
 
-namespace godot {
+using namespace godot;
 
-class AnimatableBody4D : public PhysicsBody4D {
-	GDCLASS(AnimatableBody4D, PhysicsBody4D);
+class AnimatableBody4D : public StaticBody4D {
+	GDCLASS(AnimatableBody4D, StaticBody4D);
 
 protected:
-	static void _bind_methods();
-};
+	bool _sync_to_physics = false;
 
-} // namespace godot
+	virtual void _create_physics_body() override;
+
+	static void _bind_methods();
+
+public:
+	AnimatableBody4D();
+	virtual ~AnimatableBody4D();
+
+	void set_sync_to_physics(bool p_sync);
+	bool get_sync_to_physics() const;
+};

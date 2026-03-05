@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Hinge axis -->
+  <line x1="8" y1="1" x2="8" y2="15" stroke="#80cbc4" stroke-width="2"/>
+  <!-- Two arms at angles -->
+  <line x1="8" y1="8" x2="14" y2="4" stroke="#80cbc4" stroke-width="1.5"/>
+  <line x1="8" y1="8" x2="14" y2="12" stroke="#80cbc4" stroke-width="1.5"/>
+  <!-- Arc indicating rotation -->
+  <path d="M 11,5.5 A 4,4 0 0,1 11,10.5" fill="none" stroke="#80cbc4" stroke-width="1" stroke-dasharray="1.5,1"/>
+  <circle cx="8" cy="8" r="1.5" fill="#80cbc4"/>
+  <text x="0" y="15.5" font-size="3.2" fill="#80cbc4" font-family="sans-serif" font-weight="bold">4D</text>
+</svg>

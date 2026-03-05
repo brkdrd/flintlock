@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Origin point -->
+  <circle cx="2" cy="8" r="1.5" fill="#80cbc4"/>
+  <!-- Ray line -->
+  <line x1="3.5" y1="8" x2="12" y2="8" stroke="#80cbc4" stroke-width="1.5" stroke-dasharray="2,1"/>
+  <!-- Arrowhead -->
+  <polygon points="12,5.5 15.5,8 12,10.5" fill="#80cbc4"/>
+  <!-- Extra 4D axis indicator -->
+  <line x1="2" y1="2" x2="5" y2="5" stroke="#80cbc4" stroke-width="1" stroke-dasharray="1.5,1"/>
+  <text x="0.5" y="15.5" font-size="3.2" fill="#80cbc4" font-family="sans-serif" font-weight="bold">4D</text>
+</svg>

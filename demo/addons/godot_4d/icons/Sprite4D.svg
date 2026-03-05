@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke="#fc9c9c" stroke-width="1.5"/>
+  <!-- Image content suggestion: mountain + sun -->
+  <circle cx="11" cy="5" r="1.5" fill="#fc9c9c"/>
+  <polygon points="2,13 6,7 9,11 11,8 14,13" fill="#fc9c9c" opacity="0.7"/>
+  <text x="0.5" y="15.5" font-size="3" fill="#fc9c9c" font-family="sans-serif" font-weight="bold">4D</text>
+</svg>

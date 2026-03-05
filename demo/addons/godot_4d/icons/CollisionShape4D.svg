@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Octagon-like shape outline -->
+  <polygon points="5,1.5 11,1.5 14.5,5 14.5,11 11,14.5 5,14.5 1.5,11 1.5,5" fill="none" stroke="#80cbc4" stroke-width="1.5"/>
+  <text x="4.5" y="10" font-size="4" fill="#80cbc4" font-family="sans-serif" font-weight="bold">4D</text>
+</svg>

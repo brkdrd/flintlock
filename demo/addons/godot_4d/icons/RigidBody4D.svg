@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <rect x="3" y="3" width="10" height="10" rx="1.5" fill="none" stroke="#68b6ff" stroke-width="1.5"/>
+  <path d="M8,5 A3,3 0 0,1 11,8" fill="none" stroke="#68b6ff" stroke-width="1.2"/>
+  <polygon points="11,7 12.5,9 9.5,9" fill="#68b6ff"/>
+  <text x="4.5" y="12.5" font-size="3.5" fill="#68b6ff" font-family="sans-serif" font-weight="bold">4D</text>
+</svg>
