@@ -70,6 +70,20 @@ String Transform4D::to_string() const {
 	return String("[Transform4D]");
 }
 
+Projection Transform4D::get_basis_prop() const {
+	Projection p;
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			p.columns[c][r] = basis->data[c][r];
+	return p;
+}
+
+void Transform4D::set_basis_prop(const Projection &p) {
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			basis->data[c][r] = p.columns[c][r];
+}
+
 void Transform4D::_bind_methods() {
 	ClassDB::bind_static_method("Transform4D", D_METHOD("create_identity"), &Transform4D::create_identity);
 	ClassDB::bind_static_method("Transform4D", D_METHOD("create", "basis", "origin"), &Transform4D::create);
@@ -78,9 +92,13 @@ void Transform4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_basis", "b"), &Transform4D::set_basis);
 	ClassDB::bind_method(D_METHOD("get_origin"), &Transform4D::get_origin);
 	ClassDB::bind_method(D_METHOD("set_origin", "o"), &Transform4D::set_origin);
+	ClassDB::bind_method(D_METHOD("get_basis_prop"), &Transform4D::get_basis_prop);
+	ClassDB::bind_method(D_METHOD("set_basis_prop", "p"), &Transform4D::set_basis_prop);
+	ClassDB::bind_method(D_METHOD("get_origin_v4"), &Transform4D::get_origin_v4);
+	ClassDB::bind_method(D_METHOD("set_origin_v4", "o"), &Transform4D::set_origin_v4);
 
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "basis",  PROPERTY_HINT_RESOURCE_TYPE, "Basis4D"),  "set_basis",  "get_basis");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "origin", PROPERTY_HINT_RESOURCE_TYPE, "Vector4D"), "set_origin", "get_origin");
+	ADD_PROPERTY(PropertyInfo(Variant::PROJECTION, "basis"),  "set_basis_prop",  "get_basis_prop");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR4,    "origin"), "set_origin_v4", "get_origin_v4");
 
 	ClassDB::bind_method(D_METHOD("multiplied", "b"), &Transform4D::multiplied);
 	ClassDB::bind_method(D_METHOD("xform", "v"), &Transform4D::xform);

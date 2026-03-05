@@ -101,38 +101,106 @@ Ref<Transform4D> Node4D::get_global_transform_4d() const {
 	return _global_transform_cache;
 }
 
-void Node4D::set_position_4d(const Ref<Vector4D> &p_pos) {
-	_local_transform->set_origin(p_pos);
+void Node4D::set_position_4d(const Vector4 &p_pos) {
+	Ref<Vector4D> o = _local_transform->get_origin();
+	o->x = p_pos.x; o->y = p_pos.y; o->z = p_pos.z; o->w = p_pos.w;
 	_propagate_transform_changed();
 	emit_signal("transform_4d_changed");
 }
 
-Ref<Vector4D> Node4D::get_position_4d() const {
-	return _local_transform->get_origin();
+Vector4 Node4D::get_position_4d() const {
+	Ref<Vector4D> o = _local_transform->get_origin();
+	return Vector4(o->x, o->y, o->z, o->w);
 }
 
-void Node4D::set_global_position_4d(const Ref<Vector4D> &p_pos) {
+void Node4D::set_global_position_4d(const Vector4 &p_pos) {
+	Ref<Vector4D> v; v.instantiate();
+	v->x = p_pos.x; v->y = p_pos.y; v->z = p_pos.z; v->w = p_pos.w;
 	Ref<Transform4D> g = get_global_transform_4d();
-	g->set_origin(p_pos);
+	g->set_origin(v);
 	set_global_transform_4d(g);
 }
 
-Ref<Vector4D> Node4D::get_global_position_4d() const {
-	return get_global_transform_4d()->get_origin();
+Vector4 Node4D::get_global_position_4d() const {
+	Ref<Vector4D> o = get_global_transform_4d()->get_origin();
+	return Vector4(o->x, o->y, o->z, o->w);
 }
 
-void Node4D::set_basis_4d(const Ref<Basis4D> &p_basis) {
-	_local_transform->set_basis(p_basis);
+void Node4D::set_basis_4d(const Projection &p_basis) {
+	Ref<Basis4D> b = _local_transform->get_basis();
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			b->data[c][r] = p_basis.columns[c][r];
 	_propagate_transform_changed();
 	emit_signal("transform_4d_changed");
 }
 
-Ref<Basis4D> Node4D::get_basis_4d() const {
-	return _local_transform->get_basis();
+Projection Node4D::get_basis_4d() const {
+	Projection p;
+	Ref<Basis4D> b = _local_transform->get_basis();
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			p.columns[c][r] = b->data[c][r];
+	return p;
 }
 
-Ref<Basis4D> Node4D::get_global_basis_4d() const {
-	return get_global_transform_4d()->get_basis();
+Projection Node4D::get_global_basis_4d() const {
+	Projection p;
+	Ref<Basis4D> b = get_global_transform_4d()->get_basis();
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			p.columns[c][r] = b->data[c][r];
+	return p;
+}
+
+// ─── Transform property adapters ──────────────────────────────────────────────
+
+PackedFloat64Array Node4D::_get_transform_prop() const {
+	PackedFloat64Array arr;
+	arr.resize(20);
+	Ref<Basis4D> b = _local_transform->get_basis();
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			arr[c * 4 + r] = b->data[c][r];
+	Ref<Vector4D> o = _local_transform->get_origin();
+	arr[16] = o->x; arr[17] = o->y; arr[18] = o->z; arr[19] = o->w;
+	return arr;
+}
+
+void Node4D::_set_transform_prop(const PackedFloat64Array &p_arr) {
+	if (p_arr.size() < 20) return;
+	Ref<Basis4D> b = _local_transform->get_basis();
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			b->data[c][r] = p_arr[c * 4 + r];
+	Ref<Vector4D> o = _local_transform->get_origin();
+	o->x = p_arr[16]; o->y = p_arr[17]; o->z = p_arr[18]; o->w = p_arr[19];
+	_propagate_transform_changed();
+	emit_signal("transform_4d_changed");
+}
+
+PackedFloat64Array Node4D::_get_global_transform_prop() const {
+	PackedFloat64Array arr;
+	arr.resize(20);
+	Ref<Transform4D> g = get_global_transform_4d();
+	Ref<Basis4D> b = g->get_basis();
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			arr[c * 4 + r] = b->data[c][r];
+	Ref<Vector4D> o = g->get_origin();
+	arr[16] = o->x; arr[17] = o->y; arr[18] = o->z; arr[19] = o->w;
+	return arr;
+}
+
+void Node4D::_set_global_transform_prop(const PackedFloat64Array &p_arr) {
+	if (p_arr.size() < 20) return;
+	Ref<Basis4D> b; b.instantiate();
+	for (int c = 0; c < 4; c++)
+		for (int r = 0; r < 4; r++)
+			b->data[c][r] = p_arr[c * 4 + r];
+	Ref<Vector4D> o; o.instantiate();
+	o->x = p_arr[16]; o->y = p_arr[17]; o->z = p_arr[18]; o->w = p_arr[19];
+	set_global_transform_4d(Transform4D::create(b, o));
 }
 
 // ─── Visibility ───────────────────────────────────────────────────────────────
@@ -245,35 +313,42 @@ void Node4D::force_update_transform() {
 // ─── Bindings ─────────────────────────────────────────────────────────────────
 
 void Node4D::_bind_methods() {
-	// Transform
+	// Transform (methods kept for GDScript; properties use adapters to avoid default-value warnings)
 	ClassDB::bind_method(D_METHOD("set_transform_4d", "transform"), &Node4D::set_transform_4d);
 	ClassDB::bind_method(D_METHOD("get_transform_4d"), &Node4D::get_transform_4d);
 	ClassDB::bind_method(D_METHOD("set_global_transform_4d", "transform"), &Node4D::set_global_transform_4d);
 	ClassDB::bind_method(D_METHOD("get_global_transform_4d"), &Node4D::get_global_transform_4d);
+	ClassDB::bind_method(D_METHOD("_set_transform_prop", "data"), &Node4D::_set_transform_prop);
+	ClassDB::bind_method(D_METHOD("_get_transform_prop"), &Node4D::_get_transform_prop);
+	ClassDB::bind_method(D_METHOD("_set_global_transform_prop", "data"), &Node4D::_set_global_transform_prop);
+	ClassDB::bind_method(D_METHOD("_get_global_transform_prop"), &Node4D::_get_global_transform_prop);
 
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "transform_4d", PROPERTY_HINT_RESOURCE_TYPE, "Transform4D"),
-		"set_transform_4d", "get_transform_4d");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "global_transform_4d", PROPERTY_HINT_RESOURCE_TYPE, "Transform4D",
-		PROPERTY_USAGE_NO_EDITOR), "set_global_transform_4d", "get_global_transform_4d");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT64_ARRAY, "transform_4d"),
+		"_set_transform_prop", "_get_transform_prop");
+	ADD_PROPERTY(PropertyInfo(Variant::PACKED_FLOAT64_ARRAY, "global_transform_4d",
+		PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR),
+		"_set_global_transform_prop", "_get_global_transform_prop");
 
 	// Position
 	ClassDB::bind_method(D_METHOD("set_position_4d", "position"), &Node4D::set_position_4d);
 	ClassDB::bind_method(D_METHOD("get_position_4d"), &Node4D::get_position_4d);
 	ClassDB::bind_method(D_METHOD("set_global_position_4d", "position"), &Node4D::set_global_position_4d);
 	ClassDB::bind_method(D_METHOD("get_global_position_4d"), &Node4D::get_global_position_4d);
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "position_4d", PROPERTY_HINT_RESOURCE_TYPE, "Vector4D"),
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "position_4d"),
 		"set_position_4d", "get_position_4d");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "global_position_4d", PROPERTY_HINT_RESOURCE_TYPE, "Vector4D",
-		PROPERTY_USAGE_NO_EDITOR), "set_global_position_4d", "get_global_position_4d");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "global_position_4d",
+		PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR),
+		"set_global_position_4d", "get_global_position_4d");
 
 	// Basis
 	ClassDB::bind_method(D_METHOD("set_basis_4d", "basis"), &Node4D::set_basis_4d);
 	ClassDB::bind_method(D_METHOD("get_basis_4d"), &Node4D::get_basis_4d);
 	ClassDB::bind_method(D_METHOD("get_global_basis_4d"), &Node4D::get_global_basis_4d);
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "basis_4d", PROPERTY_HINT_RESOURCE_TYPE, "Basis4D"),
+	ADD_PROPERTY(PropertyInfo(Variant::PROJECTION, "basis_4d"),
 		"set_basis_4d", "get_basis_4d");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "global_basis_4d", PROPERTY_HINT_RESOURCE_TYPE, "Basis4D",
-		PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_READ_ONLY), "set_basis_4d", "get_global_basis_4d");
+	ADD_PROPERTY(PropertyInfo(Variant::PROJECTION, "global_basis_4d",
+		PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_READ_ONLY),
+		"set_basis_4d", "get_global_basis_4d");
 
 	// Visibility
 	ClassDB::bind_method(D_METHOD("set_visible", "visible"), &Node4D::set_visible);

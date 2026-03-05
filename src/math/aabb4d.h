@@ -2,6 +2,7 @@
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/vector4.hpp>
 #include "vector4d.h"
 
 namespace godot {
@@ -22,6 +23,12 @@ public:
 	Ref<Vector4D> get_size()     const { return size; }
 	void set_position(const Ref<Vector4D> &p) { position = p; }
 	void set_size(const Ref<Vector4D> &s)     { size = s; }
+
+	// Property adapters using built-in Vector4 (avoids ClassDB default-value warnings)
+	Vector4 get_position_v4() const { return Vector4(position->x, position->y, position->z, position->w); }
+	Vector4 get_size_v4()     const { return Vector4(size->x, size->y, size->z, size->w); }
+	void set_position_v4(const Vector4 &p) { position->x = p.x; position->y = p.y; position->z = p.z; position->w = p.w; }
+	void set_size_v4(const Vector4 &s)     { size->x = s.x; size->y = s.y; size->z = s.z; size->w = s.w; }
 
 	Ref<Vector4D> get_end() const;
 	Ref<Vector4D> get_center() const;

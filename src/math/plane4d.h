@@ -2,6 +2,7 @@
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/vector4.hpp>
 #include "vector4d.h"
 
 namespace godot {
@@ -26,6 +27,10 @@ public:
 	real_t        get_d()      const { return d; }
 	void set_normal(const Ref<Vector4D> &n) { normal = n; }
 	void set_d(real_t v) { d = v; }
+
+	// Property adapter using built-in Vector4 (avoids ClassDB default-value warning)
+	Vector4 get_normal_v4() const { return Vector4(normal->x, normal->y, normal->z, normal->w); }
+	void set_normal_v4(const Vector4 &n) { normal->x = n.x; normal->y = n.y; normal->z = n.z; normal->w = n.w; }
 
 	// Signed distance from a point to the hyperplane.
 	// Positive = same side as normal direction.

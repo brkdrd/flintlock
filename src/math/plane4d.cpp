@@ -120,8 +120,10 @@ void Plane4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_normal", "n"), &Plane4D::set_normal);
 	ClassDB::bind_method(D_METHOD("get_d"), &Plane4D::get_d);
 	ClassDB::bind_method(D_METHOD("set_d", "v"), &Plane4D::set_d);
+	ClassDB::bind_method(D_METHOD("get_normal_v4"), &Plane4D::get_normal_v4);
+	ClassDB::bind_method(D_METHOD("set_normal_v4", "n"), &Plane4D::set_normal_v4);
 
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "normal", PROPERTY_HINT_RESOURCE_TYPE, "Vector4D"), "set_normal", "get_normal");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "normal"), "set_normal_v4", "get_normal_v4");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "d"), "set_d", "get_d");
 
 	ClassDB::bind_method(D_METHOD("distance_to", "point"), &Plane4D::distance_to);

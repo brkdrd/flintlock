@@ -102,9 +102,13 @@ void AABB4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_position", "p"), &AABB4D::set_position);
 	ClassDB::bind_method(D_METHOD("get_size"), &AABB4D::get_size);
 	ClassDB::bind_method(D_METHOD("set_size", "s"), &AABB4D::set_size);
+	ClassDB::bind_method(D_METHOD("get_position_v4"), &AABB4D::get_position_v4);
+	ClassDB::bind_method(D_METHOD("set_position_v4", "p"), &AABB4D::set_position_v4);
+	ClassDB::bind_method(D_METHOD("get_size_v4"), &AABB4D::get_size_v4);
+	ClassDB::bind_method(D_METHOD("set_size_v4", "s"), &AABB4D::set_size_v4);
 
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "position", PROPERTY_HINT_RESOURCE_TYPE, "Vector4D"), "set_position", "get_position");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "size",     PROPERTY_HINT_RESOURCE_TYPE, "Vector4D"), "set_size",     "get_size");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "position"), "set_position_v4", "get_position_v4");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "size"),     "set_size_v4",     "get_size_v4");
 
 	ClassDB::bind_method(D_METHOD("get_end"),    &AABB4D::get_end);
 	ClassDB::bind_method(D_METHOD("get_center"), &AABB4D::get_center);

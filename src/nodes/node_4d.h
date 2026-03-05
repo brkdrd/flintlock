@@ -2,6 +2,9 @@
 
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/vector4.hpp>
+#include <godot_cpp/variant/projection.hpp>
+#include <godot_cpp/variant/packed_float64_array.hpp>
 #include "../math/transform4d.h"
 #include "../math/vector4d.h"
 #include "../math/basis4d.h"
@@ -30,18 +33,24 @@ public:
 	void set_global_transform_4d(const Ref<Transform4D> &p_transform);
 	Ref<Transform4D> get_global_transform_4d() const;
 
-	// Position shortcuts
-	void set_position_4d(const Ref<Vector4D> &p_pos);
-	Ref<Vector4D> get_position_4d() const;
+	// Position shortcuts (use built-in Vector4 to avoid property default-value warnings)
+	void set_position_4d(const Vector4 &p_pos);
+	Vector4 get_position_4d() const;
 
-	void set_global_position_4d(const Ref<Vector4D> &p_pos);
-	Ref<Vector4D> get_global_position_4d() const;
+	void set_global_position_4d(const Vector4 &p_pos);
+	Vector4 get_global_position_4d() const;
 
-	// Basis shortcuts
-	void set_basis_4d(const Ref<Basis4D> &p_basis);
-	Ref<Basis4D> get_basis_4d() const;
+	// Basis shortcuts (use built-in Projection to avoid property default-value warnings)
+	void set_basis_4d(const Projection &p_basis);
+	Projection get_basis_4d() const;
 
-	Ref<Basis4D> get_global_basis_4d() const;
+	Projection get_global_basis_4d() const;
+
+	// Transform property adapters (PackedFloat64Array: 16 basis + 4 origin floats)
+	PackedFloat64Array _get_transform_prop() const;
+	void _set_transform_prop(const PackedFloat64Array &p_arr);
+	PackedFloat64Array _get_global_transform_prop() const;
+	void _set_global_transform_prop(const PackedFloat64Array &p_arr);
 
 	// ─── Visibility ───────────────────────────────────────────────────────────
 	void set_visible(bool p_visible);

@@ -2,6 +2,8 @@
 
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/vector4.hpp>
+#include <godot_cpp/variant/projection.hpp>
 #include "basis4d.h"
 #include "vector4d.h"
 
@@ -26,6 +28,12 @@ public:
 	Ref<Vector4D> get_origin() const { return origin; }
 	void set_basis(const Ref<Basis4D> &p_b)   { basis  = p_b; }
 	void set_origin(const Ref<Vector4D> &p_o) { origin = p_o; }
+
+	// Property adapters using built-in types (avoids ClassDB default-value warnings)
+	Projection get_basis_prop() const;
+	void set_basis_prop(const Projection &p);
+	Vector4 get_origin_v4() const { return Vector4(origin->x, origin->y, origin->z, origin->w); }
+	void set_origin_v4(const Vector4 &o) { origin->x = o.x; origin->y = o.y; origin->z = o.z; origin->w = o.w; }
 
 	// Composition
 	Ref<Transform4D> multiplied(const Ref<Transform4D> &p_b) const;
