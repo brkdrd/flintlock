@@ -144,6 +144,15 @@ void Slicer4D::_slice_instance_cpu(VisualInstance4D *p_instance,
 
 			if (inter_count < 3) continue;
 
+			// For quad case (inter_count == 4), the edge enumeration order
+			// {(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)} always produces points
+			// where [2] and [3] are swapped relative to the correct cyclic
+			// polygon order. Swap them to avoid bowtie self-intersection.
+			if (inter_count == 4) {
+				Vector4 tmp_p = inter_pts[2]; inter_pts[2] = inter_pts[3]; inter_pts[3] = tmp_p;
+				Vector4 tmp_n = inter_nrm[2]; inter_nrm[2] = inter_nrm[3]; inter_nrm[3] = tmp_n;
+			}
+
 			// Project intersection points to 3D
 			auto project_to_3d = [&](const Vector4 &p4) -> Vector3 {
 				Vector4 rel = p4 - p_camera_origin;
@@ -154,30 +163,32 @@ void Slicer4D::_slice_instance_cpu(VisualInstance4D *p_instance,
 				return Vector3(col0.dot(n4), col1.dot(n4), col2.dot(n4)).normalized();
 			};
 
-			// Output triangle(s)
-			if (inter_count == 3) {
-				// One triangle
-				for (int k = 0; k < 3; k++) {
-					Vector3 p3 = project_to_3d(inter_pts[k]);
-					Vector3 n3 = project_normal_to_3d(inter_nrm[k]);
-					out_verts.push_back(p3.x); out_verts.push_back(p3.y); out_verts.push_back(p3.z);
-					out_normals.push_back(n3.x); out_normals.push_back(n3.y); out_normals.push_back(n3.z);
+			// Output triangle(s) via fan triangulation with winding correction
+			for (int k = 1; k < inter_count - 1; k++) {
+				Vector3 p3[3] = {
+					project_to_3d(inter_pts[0]),
+					project_to_3d(inter_pts[k]),
+					project_to_3d(inter_pts[k + 1])
+				};
+				Vector3 n3[3] = {
+					project_normal_to_3d(inter_nrm[0]),
+					project_normal_to_3d(inter_nrm[k]),
+					project_normal_to_3d(inter_nrm[k + 1])
+				};
+
+				// Fix winding: face normal should agree with surface normal
+				Vector3 face_normal = (p3[1] - p3[0]).cross(p3[2] - p3[0]);
+				Vector3 avg_n = n3[0] + n3[1] + n3[2];
+				if (face_normal.dot(avg_n) < 0.0f) {
+					Vector3 tmp3 = p3[1]; p3[1] = p3[2]; p3[2] = tmp3;
+					tmp3 = n3[1]; n3[1] = n3[2]; n3[2] = tmp3;
+				}
+
+				for (int p = 0; p < 3; p++) {
+					out_verts.push_back(p3[p].x); out_verts.push_back(p3[p].y); out_verts.push_back(p3[p].z);
+					out_normals.push_back(n3[p].x); out_normals.push_back(n3[p].y); out_normals.push_back(n3[p].z);
 					out_uvs.push_back(0.0f); out_uvs.push_back(0.0f);
 					out_indices.push_back(tri_idx++);
-				}
-			} else {
-				// Quadrilateral (4 or more points) - split into 2 triangles
-				// Fan triangulation from first point
-				for (int k = 1; k < inter_count - 1; k++) {
-					int pts[3] = {0, k, k+1};
-					for (int p = 0; p < 3; p++) {
-						Vector3 p3 = project_to_3d(inter_pts[pts[p]]);
-						Vector3 n3 = project_normal_to_3d(inter_nrm[pts[p]]);
-						out_verts.push_back(p3.x); out_verts.push_back(p3.y); out_verts.push_back(p3.z);
-						out_normals.push_back(n3.x); out_normals.push_back(n3.y); out_normals.push_back(n3.z);
-						out_uvs.push_back(0.0f); out_uvs.push_back(0.0f);
-						out_indices.push_back(tri_idx++);
-					}
 				}
 			}
 		}
