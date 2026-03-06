@@ -223,12 +223,6 @@ void Vector4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("to_vector4"), &Vector4D::to_vector4);
 	ClassDB::bind_method(D_METHOD("to_string"), &Vector4D::to_string);
 
-	// Properties
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "x"), "set_x", "get_x");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "y"), "set_y", "get_y");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "z"), "set_z", "get_z");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "w"), "set_w", "get_w");
-
 	ClassDB::bind_method(D_METHOD("get_x"), &Vector4D::get_x);
 	ClassDB::bind_method(D_METHOD("get_y"), &Vector4D::get_y);
 	ClassDB::bind_method(D_METHOD("get_z"), &Vector4D::get_z);
@@ -237,6 +231,12 @@ void Vector4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_y", "v"), &Vector4D::set_y);
 	ClassDB::bind_method(D_METHOD("set_z", "v"), &Vector4D::set_z);
 	ClassDB::bind_method(D_METHOD("set_w", "v"), &Vector4D::set_w);
+
+	// Properties (must come after setter bind_method calls)
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "x"), "set_x", "get_x");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "y"), "set_y", "get_y");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "z"), "set_z", "get_z");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "w"), "set_w", "get_w");
 
 	// PlaneAxis enum
 }

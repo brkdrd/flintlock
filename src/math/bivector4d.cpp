@@ -18,13 +18,6 @@ void Bivector4D::_bind_methods() {
 	ClassDB::bind_static_method("Bivector4D", D_METHOD("wedge", "r", "f"), &Bivector4D::wedge);
 	ClassDB::bind_method(D_METHOD("to_matrix"), &Bivector4D::to_matrix);
 
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "xy"), "set_xy", "get_xy");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "xz"), "set_xz", "get_xz");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "xw"), "set_xw", "get_xw");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "yz"), "set_yz", "get_yz");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "yw"), "set_yw", "get_yw");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "zw"), "set_zw", "get_zw");
-
 	ClassDB::bind_method(D_METHOD("get_xy"), &Bivector4D::get_xy);
 	ClassDB::bind_method(D_METHOD("set_xy", "v"), &Bivector4D::set_xy);
 	ClassDB::bind_method(D_METHOD("get_xz"), &Bivector4D::get_xz);
@@ -37,6 +30,14 @@ void Bivector4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_yw", "v"), &Bivector4D::set_yw);
 	ClassDB::bind_method(D_METHOD("get_zw"), &Bivector4D::get_zw);
 	ClassDB::bind_method(D_METHOD("set_zw", "v"), &Bivector4D::set_zw);
+
+	// Properties (must come after setter bind_method calls)
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "xy"), "set_xy", "get_xy");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "xz"), "set_xz", "get_xz");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "xw"), "set_xw", "get_xw");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "yz"), "set_yz", "get_yz");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "yw"), "set_yw", "get_yw");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "zw"), "set_zw", "get_zw");
 }
 
 Ref<Bivector4D> Bivector4D::create(real_t p_xy, real_t p_xz, real_t p_xw, real_t p_yz, real_t p_yw, real_t p_zw) {
