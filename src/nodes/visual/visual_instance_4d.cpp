@@ -21,6 +21,7 @@ void VisualInstance4D::_notification(int p_what) {
 
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
+			set_notify_transform_4d(true);
 			RenderingServer *rs = RenderingServer::get_singleton();
 			_rs_mesh = rs->mesh_create();
 			_rs_instance = rs->instance_create();
