@@ -77,7 +77,7 @@ func _ready() -> void:
 	sphere_slider.value_changed.connect(func(val: float) -> void:
 		var pos := _sphere.position_4d
 		_sphere.position_4d = Vector4(pos.x, pos.y, pos.z, val)
-		sphere_label.text = "Sphere W: %.2f" % val
+		sphere_label.set_deferred("text", "Sphere W: %.2f" % val)
 	)
 	vbox.add_child(sphere_slider)
 
@@ -95,6 +95,6 @@ func _ready() -> void:
 	camera_slider.value_changed.connect(func(val: float) -> void:
 		var pos := _camera.position_4d
 		_camera.position_4d = Vector4(pos.x, pos.y, pos.z, val)
-		camera_label.text = "Camera W: %.2f" % val
+		camera_label.set_deferred("text", "Camera W: %.2f" % val)
 	)
 	vbox.add_child(camera_slider)
