@@ -80,9 +80,37 @@ void Slicer4D::_slice_instance_cpu(VisualInstance4D *p_instance,
 
 		if (verts4d.is_empty() || indices4d.is_empty()) continue;
 
-		// Apply instance 4D transform to vertices
-		// Get world transform from the instance
-		PackedFloat32Array world_verts = verts4d; // TODO: apply Transform4D
+		// Apply instance 4D transform to vertices and normals
+		Ref<Transform4D> gt = p_instance->get_global_transform_4d();
+		Ref<Basis4D> basis = gt->get_basis();
+		Ref<Vector4D> origin = gt->get_origin();
+		float ox = origin->x, oy = origin->y, oz = origin->z, ow = origin->w;
+
+		PackedFloat32Array world_verts;
+		int vert_count = verts4d.size() / 4;
+		world_verts.resize(verts4d.size());
+		for (int vi = 0; vi < vert_count; vi++) {
+			float lx = verts4d[vi * 4], ly = verts4d[vi * 4 + 1];
+			float lz = verts4d[vi * 4 + 2], lw = verts4d[vi * 4 + 3];
+			// basis * local + origin (column-major: data[col][row])
+			world_verts[vi * 4 + 0] = basis->data[0][0] * lx + basis->data[1][0] * ly + basis->data[2][0] * lz + basis->data[3][0] * lw + ox;
+			world_verts[vi * 4 + 1] = basis->data[0][1] * lx + basis->data[1][1] * ly + basis->data[2][1] * lz + basis->data[3][1] * lw + oy;
+			world_verts[vi * 4 + 2] = basis->data[0][2] * lx + basis->data[1][2] * ly + basis->data[2][2] * lz + basis->data[3][2] * lw + oz;
+			world_verts[vi * 4 + 3] = basis->data[0][3] * lx + basis->data[1][3] * ly + basis->data[2][3] * lz + basis->data[3][3] * lw + ow;
+		}
+
+		PackedFloat32Array world_norms;
+		int norm_count = norms4d.size() / 4;
+		world_norms.resize(norms4d.size());
+		for (int ni = 0; ni < norm_count; ni++) {
+			float lx = norms4d[ni * 4], ly = norms4d[ni * 4 + 1];
+			float lz = norms4d[ni * 4 + 2], lw = norms4d[ni * 4 + 3];
+			// Normals: basis only (no translation)
+			world_norms[ni * 4 + 0] = basis->data[0][0] * lx + basis->data[1][0] * ly + basis->data[2][0] * lz + basis->data[3][0] * lw;
+			world_norms[ni * 4 + 1] = basis->data[0][1] * lx + basis->data[1][1] * ly + basis->data[2][1] * lz + basis->data[3][1] * lw;
+			world_norms[ni * 4 + 2] = basis->data[0][2] * lx + basis->data[1][2] * ly + basis->data[2][2] * lz + basis->data[3][2] * lw;
+			world_norms[ni * 4 + 3] = basis->data[0][3] * lx + basis->data[1][3] * ly + basis->data[2][3] * lz + basis->data[3][3] * lw;
+		}
 
 		// Process each tetrahedron (4 indices)
 		int tet_count = indices4d.size() / 4;
@@ -101,12 +129,12 @@ void Slicer4D::_slice_instance_cpu(VisualInstance4D *p_instance,
 				v[k] = Vector4(world_verts[idx], world_verts[idx+1], world_verts[idx+2], world_verts[idx+3]);
 			}
 
-			// Get 4D normals
+			// Get 4D normals (transformed)
 			Vector4 n[4];
 			for (int k = 0; k < 4; k++) {
 				int idx = vis[k] * 4;
-				if (norms4d.size() > idx + 3) {
-					n[k] = Vector4(norms4d[idx], norms4d[idx+1], norms4d[idx+2], norms4d[idx+3]);
+				if (world_norms.size() > idx + 3) {
+					n[k] = Vector4(world_norms[idx], world_norms[idx+1], world_norms[idx+2], world_norms[idx+3]);
 				}
 			}
 
