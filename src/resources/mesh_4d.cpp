@@ -106,12 +106,10 @@ void HyperBoxMesh4D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "size"), "set_size", "get_size");
 }
 
-// Tesseract: 16 vertices at (+/-hx, +/-hy, +/-hz, +/-hw)
-// Decomposed into 24 tetrahedra.
-// Each of the 24 tetrahedra comes from one of the 8 cubic cells.
-// Each cubic cell is divided into 6 tetrahedra.
-// But a tesseract has 8 cells, 8*6 = 48 would be cubic division.
-// Simpler: use the standard decomposition of a 4-cube into 24 simplices.
+// Tesseract: 16 vertices at (+/-hx, +/-hy, +/-hz, +/-hw).
+// The boundary consists of 8 cubic cells (3-faces). Each cubic cell
+// is decomposed into 6 tetrahedra using the Kuhn/Freudenthal method,
+// giving 48 tetrahedra total.
 Array HyperBoxMesh4D::_create_mesh_array() const {
 	float hx = _size.x * 0.5f, hy = _size.y * 0.5f;
 	float hz = _size.z * 0.5f, hw = _size.w * 0.5f;
@@ -134,64 +132,79 @@ Array HyperBoxMesh4D::_create_mesh_array() const {
 		}
 	}
 
-	// Vertex index layout:
-	// v(x,y,z,w) = w*8 + z*4 + y*2 + x (where x,y,z,w in {0,1})
-	// Decompose into tetrahedra using Kuhn decomposition of the 4-cube.
-	// The standard decomposition of [0,1]^4 into 24 simplices uses
-	// the ordering-based method: for each permutation of {x,y,z,w},
-	// a simplex is defined by consecutive increments.
-	// We'll use a simpler approach: decompose each of the 8 cubic cells.
-
-	// Helper to get vertex index
+	// Vertex index: v(x,y,z,w) = w*8 + z*4 + y*2 + x (x,y,z,w in {0,1})
 	auto V = [](int x, int y, int z, int w) -> int {
 		return w * 8 + z * 4 + y * 2 + x;
 	};
 
-	// Normals: 4D outward-pointing normals for each face
+	// Normals: 4D outward-pointing normals per vertex (accumulated from faces)
 	PackedFloat32Array normals;
 	normals.resize(16 * 4);
-	// Initialize all normals to 0; we'll compute them per-tetrahedron later
 	for (int i = 0; i < 16 * 4; i++) normals[i] = 0.0f;
 
-	// Standard decomposition of unit 4-cube into 24 tetrahedra
-	// Each tetrahedron is specified by 4 vertex indices
-	// Using the Kuhn decomposition: for each permutation sigma of {0,1,2,3},
-	// define vertices v_0=origin, v_k = v_{k-1} + e_{sigma(k)}.
-	// There are 24 such permutations.
-	static const int perms[24][4] = {
-		{0,1,2,3},{0,1,3,2},{0,2,1,3},{0,2,3,1},{0,3,1,2},{0,3,2,1},
-		{1,0,2,3},{1,0,3,2},{1,2,0,3},{1,2,3,0},{1,3,0,2},{1,3,2,0},
-		{2,0,1,3},{2,0,3,1},{2,1,0,3},{2,1,3,0},{2,3,0,1},{2,3,1,0},
-		{3,0,1,2},{3,0,2,1},{3,1,0,2},{3,1,2,0},{3,2,0,1},{3,2,1,0}
+	// 6 permutations of 3 axes for Kuhn decomposition of each cube
+	static const int perms3[6][3] = {
+		{0,1,2}, {0,2,1}, {1,0,2}, {1,2,0}, {2,0,1}, {2,1,0}
 	};
 
+	// The 8 cubic cells of a tesseract.
+	// Each cell is obtained by fixing one axis to 0 or 1.
+	// The 3 free axes index the 8 vertices of the cube.
+	// face_axis: which of {x,y,z,w} is fixed. face_val: 0 or 1.
+	// free_axes[3]: the 3 varying axes.
 	PackedInt32Array indices;
-	indices.resize(24 * 4);
 
-	for (int t = 0; t < 24; t++) {
-		// Build tetrahedron: start at (0,0,0,0), add unit vectors in permutation order
-		int coords[4][4] = {{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}};
-		for (int step = 0; step < 4; step++) {
-			// Copy previous
-			for (int k = 0; k < 4; k++) coords[step+1 <= 3 ? step+1 : 3][k] = coords[step > 0 ? step : 0][k];
-			if (step < 3) {
-				for (int k = 0; k < 4; k++) coords[step+1][k] = coords[step][k];
-				coords[step+1][perms[t][step]] += 1;
+	for (int face_axis = 0; face_axis < 4; face_axis++) {
+		for (int face_val = 0; face_val < 2; face_val++) {
+			// Determine the 3 free axes
+			int free_axes[3];
+			int fi = 0;
+			for (int a = 0; a < 4; a++) {
+				if (a != face_axis) free_axes[fi++] = a;
+			}
+
+			// Outward normal for this face
+			float ndir = (face_val == 0) ? -1.0f : 1.0f;
+
+			// Build the 8 vertices of this cube
+			// coords[dx][dy][dz] where dx,dy,dz in {0,1} vary over free_axes
+			int cube_v[2][2][2];
+			for (int d0 = 0; d0 < 2; d0++) {
+				for (int d1 = 0; d1 < 2; d1++) {
+					for (int d2 = 0; d2 < 2; d2++) {
+						int c[4] = {0,0,0,0};
+						c[face_axis] = face_val;
+						c[free_axes[0]] = d0;
+						c[free_axes[1]] = d1;
+						c[free_axes[2]] = d2;
+						int vi = V(c[0], c[1], c[2], c[3]);
+						cube_v[d0][d1][d2] = vi;
+
+						// Add outward normal contribution
+						normals[vi * 4 + face_axis] += ndir;
+					}
+				}
+			}
+
+			// Decompose cube into 6 tetrahedra using Kuhn method
+			for (int t = 0; t < 6; t++) {
+				int p[3] = {0, 0, 0};
+				indices.push_back(cube_v[0][0][0]);
+				for (int s = 0; s < 3; s++) {
+					p[perms3[t][s]] = 1;
+					indices.push_back(cube_v[p[0]][p[1]][p[2]]);
+				}
 			}
 		}
-		// Actually build simplex as cumulative sums
-		int xs[5] = {0,0,0,0,0}, ys[5] = {0,0,0,0,0}, zs[5] = {0,0,0,0,0}, ws[5] = {0,0,0,0,0};
-		for (int step = 1; step <= 4; step++) {
-			xs[step] = xs[step-1]; ys[step] = ys[step-1];
-			zs[step] = zs[step-1]; ws[step] = ws[step-1];
-			int axis = perms[t][step-1];
-			if (axis == 0) xs[step]++;
-			else if (axis == 1) ys[step]++;
-			else if (axis == 2) zs[step]++;
-			else ws[step]++;
-		}
-		for (int v = 0; v < 4; v++) {
-			indices[t * 4 + v] = V(xs[v], ys[v], zs[v], ws[v]);
+	}
+
+	// Normalize the accumulated normals
+	for (int i = 0; i < 16; i++) {
+		float nx = normals[i*4], ny = normals[i*4+1], nz = normals[i*4+2], nw = normals[i*4+3];
+		float len = sqrtf(nx*nx + ny*ny + nz*nz + nw*nw);
+		if (len > 1e-8f) {
+			normals[i*4] /= len; normals[i*4+1] /= len;
+			normals[i*4+2] /= len; normals[i*4+3] /= len;
 		}
 	}
 
@@ -258,20 +271,36 @@ Array HyperSphereMesh4D::_create_mesh_array() const {
 		}
 	}
 
-	// Generate indices (tetrahedra)
+	// Generate indices (tetrahedra) using 3D Kuhn/Freudenthal decomposition.
+	// Each cell in the (phi1, phi2, theta) parameter grid is a 3D cube
+	// decomposed into 6 tetrahedra via the 6 permutations of {0,1,2}.
 	int segs1 = segments + 1;
 	int segs2 = rings2 + 1;
+
+	// 6 permutations of {0,1,2} for the Kuhn decomposition
+	static const int perms3[6][3] = {
+		{0,1,2}, {0,2,1}, {1,0,2}, {1,2,0}, {2,0,1}, {2,1,0}
+	};
+
 	for (int i = 0; i < rings1; i++) {
 		for (int j = 0; j < rings2; j++) {
 			for (int k = 0; k < segments; k++) {
-				int v0 = i * segs2 * segs1 + j * segs1 + k;
-				int v1 = v0 + 1;
-				int v2 = v0 + segs1;
-				int v3 = v2 + 1;
-				int v4 = v0 + segs2 * segs1;
-				// Two tetrahedra per quad in parameter space (simplified)
-				indices.push_back(v0); indices.push_back(v1); indices.push_back(v2); indices.push_back(v4);
-				indices.push_back(v1); indices.push_back(v2); indices.push_back(v3); indices.push_back(v4);
+				// 8 vertices of the cell: c[di][dj][dk]
+				int c[2][2][2];
+				for (int di = 0; di < 2; di++)
+					for (int dj = 0; dj < 2; dj++)
+						for (int dk = 0; dk < 2; dk++)
+							c[di][dj][dk] = (i + di) * segs2 * segs1 + (j + dj) * segs1 + (k + dk);
+
+				// 6 tetrahedra per cell
+				for (int t = 0; t < 6; t++) {
+					int p[3] = {0, 0, 0};
+					indices.push_back(c[0][0][0]);
+					for (int s = 0; s < 3; s++) {
+						p[perms3[t][s]] = 1;
+						indices.push_back(c[p[0]][p[1]][p[2]]);
+					}
+				}
 			}
 		}
 	}
@@ -339,17 +368,29 @@ Array HyperCylinderMesh4D::_create_mesh_array() const {
 		}
 	}
 
+	static const int perms3[6][3] = {
+		{0,1,2}, {0,2,1}, {1,0,2}, {1,2,0}, {2,0,1}, {2,1,0}
+	};
+
 	int row_size = (segs_phi + 1) * (segs_theta + 1);
 	for (int w = 0; w < rings; w++) {
 		for (int i = 0; i < segs_phi; i++) {
 			for (int j = 0; j < segs_theta; j++) {
-				int v0 = w * row_size + i * (segs_theta + 1) + j;
-				int v1 = v0 + 1;
-				int v2 = v0 + (segs_theta + 1);
-				int v3 = v2 + 1;
-				int v4 = v0 + row_size;
-				indices.push_back(v0); indices.push_back(v1); indices.push_back(v2); indices.push_back(v4);
-				indices.push_back(v1); indices.push_back(v2); indices.push_back(v3); indices.push_back(v4);
+				// 8 vertices of the cell: c[dw][di][dj]
+				int c[2][2][2];
+				for (int dw = 0; dw < 2; dw++)
+					for (int di = 0; di < 2; di++)
+						for (int dj = 0; dj < 2; dj++)
+							c[dw][di][dj] = (w + dw) * row_size + (i + di) * (segs_theta + 1) + (j + dj);
+
+				for (int t = 0; t < 6; t++) {
+					int p[3] = {0, 0, 0};
+					indices.push_back(c[0][0][0]);
+					for (int s = 0; s < 3; s++) {
+						p[perms3[t][s]] = 1;
+						indices.push_back(c[p[0]][p[1]][p[2]]);
+					}
+				}
 			}
 		}
 	}
@@ -415,17 +456,28 @@ Array HyperCapsuleMesh4D::_create_mesh_array() const {
 		}
 	}
 
+	static const int perms3[6][3] = {
+		{0,1,2}, {0,2,1}, {1,0,2}, {1,2,0}, {2,0,1}, {2,1,0}
+	};
+
 	int row_size = (segs + 1) * (segs + 1);
 	for (int w = 0; w < rings; w++) {
 		for (int i = 0; i < segs; i++) {
 			for (int j = 0; j < segs; j++) {
-				int v0 = w * row_size + i * (segs + 1) + j;
-				int v1 = v0 + 1;
-				int v2 = v0 + (segs + 1);
-				int v3 = v2 + 1;
-				int v4 = v0 + row_size;
-				indices.push_back(v0); indices.push_back(v1); indices.push_back(v2); indices.push_back(v4);
-				indices.push_back(v1); indices.push_back(v2); indices.push_back(v3); indices.push_back(v4);
+				int c[2][2][2];
+				for (int dw = 0; dw < 2; dw++)
+					for (int di = 0; di < 2; di++)
+						for (int dj = 0; dj < 2; dj++)
+							c[dw][di][dj] = (w + dw) * row_size + (i + di) * (segs + 1) + (j + dj);
+
+				for (int t = 0; t < 6; t++) {
+					int p[3] = {0, 0, 0};
+					indices.push_back(c[0][0][0]);
+					for (int s = 0; s < 3; s++) {
+						p[perms3[t][s]] = 1;
+						indices.push_back(c[p[0]][p[1]][p[2]]);
+					}
+				}
 			}
 		}
 	}
