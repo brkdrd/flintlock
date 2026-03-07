@@ -84,9 +84,7 @@ void Camera4D::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_PROCESS: {
-			if (!Engine::get_singleton()->is_editor_hint() || _current) {
-				_perform_slice();
-			}
+			_perform_slice();
 		} break;
 
 		case NOTIFICATION_TRANSFORM_4D_CHANGED: {
@@ -164,9 +162,15 @@ void Camera4D::_perform_slice() {
 	Vector4 camera_origin(origin->x, origin->y, origin->z, origin->w);
 	Slicer4D::get_singleton()->slice_all(plane_normal, plane_d, basis_cols, camera_origin);
 
-	// The internal Camera3D stays at identity since the slicer outputs camera-relative 3D coords
+	// Position the internal Camera3D at the camera's projected 3D location.
+	// Geometry is now in world 3D space, so the camera must be at its corresponding 3D position.
 	if (_internal_camera) {
-		_internal_camera->set_global_transform(Transform3D());
+		Vector4 col0(basis_cols[0], basis_cols[1], basis_cols[2], basis_cols[3]);
+		Vector4 col1(basis_cols[4], basis_cols[5], basis_cols[6], basis_cols[7]);
+		Vector4 col2(basis_cols[8], basis_cols[9], basis_cols[10], basis_cols[11]);
+		Transform3D cam_xform;
+		cam_xform.origin = Vector3(col0.dot(camera_origin), col1.dot(camera_origin), col2.dot(camera_origin));
+		_internal_camera->set_global_transform(cam_xform);
 	}
 }
 

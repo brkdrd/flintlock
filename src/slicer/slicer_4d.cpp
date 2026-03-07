@@ -181,10 +181,10 @@ void Slicer4D::_slice_instance_cpu(VisualInstance4D *p_instance,
 				Vector4 tmp_n = inter_nrm[2]; inter_nrm[2] = inter_nrm[3]; inter_nrm[3] = tmp_n;
 			}
 
-			// Project intersection points to 3D
+			// Project intersection points to world 3D space.
+			// Position is determined solely by the 4D object's position (no camera subtraction).
 			auto project_to_3d = [&](const Vector4 &p4) -> Vector3 {
-				Vector4 rel = p4 - p_camera_origin;
-				return Vector3(col0.dot(rel), col1.dot(rel), col2.dot(rel));
+				return Vector3(col0.dot(p4), col1.dot(p4), col2.dot(p4));
 			};
 
 			auto project_normal_to_3d = [&](const Vector4 &n4) -> Vector3 {
