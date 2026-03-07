@@ -30,6 +30,9 @@ public:
 	// Called by Slicer4D to get the 4D mesh data
 	virtual Ref<Mesh4D> get_mesh_4d() const { return Ref<Mesh4D>(); }
 
+	// Marks slicer dirty when transform changes (virtual override from Node4D)
+	void _on_transform_4d_changed() override;
+
 	// Called by Slicer4D to update the rendered 3D geometry
 	void update_rendering_mesh(
 		const PackedFloat32Array &p_vertices,

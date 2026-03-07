@@ -32,9 +32,9 @@ void Node4D::_update_global_transform() const {
 void Node4D::_propagate_transform_changed() {
 	_global_transform_dirty = true;
 
-	if (_notify_transform) {
-		notification(NOTIFICATION_TRANSFORM_4D_CHANGED);
-	}
+	// Direct virtual call — avoids Godot's Object::notification() pipeline
+	// which triggers accessibility-driver errors when called from UI callbacks.
+	_on_transform_4d_changed();
 
 	// Propagate to child Node4D nodes
 	for (int i = 0; i < get_child_count(); i++) {

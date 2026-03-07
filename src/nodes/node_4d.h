@@ -86,6 +86,10 @@ public:
 	// ─── Notifications ────────────────────────────────────────────────────────
 	void _notification(int p_what);
 
+	// Called directly by _propagate_transform_changed (bypasses Godot's
+	// notification pipeline to avoid accessibility-driver errors).
+	virtual void _on_transform_4d_changed() {}
+
 protected:
 	static void _bind_methods();
 

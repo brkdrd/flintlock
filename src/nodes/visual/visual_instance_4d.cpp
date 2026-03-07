@@ -21,7 +21,6 @@ void VisualInstance4D::_notification(int p_what) {
 
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
-			set_notify_transform_4d(true);
 			RenderingServer *rs = RenderingServer::get_singleton();
 			_rs_mesh = rs->mesh_create();
 			_rs_instance = rs->instance_create();
@@ -62,17 +61,17 @@ void VisualInstance4D::_notification(int p_what) {
 			}
 		} break;
 
-		case NOTIFICATION_TRANSFORM_4D_CHANGED: {
-			if (Slicer4D::get_singleton()) {
-				Slicer4D::get_singleton()->mark_dirty(this);
-			}
-		} break;
-
 		case NOTIFICATION_VISIBILITY_4D_CHANGED: {
 			if (_rs_instance.is_valid()) {
 				RenderingServer::get_singleton()->instance_set_visible(_rs_instance, is_visible_in_tree());
 			}
 		} break;
+	}
+}
+
+void VisualInstance4D::_on_transform_4d_changed() {
+	if (Slicer4D::get_singleton()) {
+		Slicer4D::get_singleton()->mark_dirty(this);
 	}
 }
 
