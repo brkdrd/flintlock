@@ -5,6 +5,7 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/rid.hpp>
+#include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/templates/vector.hpp>
 #include <godot_cpp/templates/hash_set.hpp>
 
@@ -40,6 +41,9 @@ class Slicer4D : public Object {
 	Vector4 _cached_plane_normal = Vector4(0, 0, 0, 1);
 	float _cached_plane_d = 0.0f;
 
+	// Camera's equivalent 3D transform (for placing sliced geometry in world 3D space)
+	Transform3D _camera_3d_transform;
+
 	void _initialize_pipeline();
 	void _slice_instance_cpu(VisualInstance4D *p_instance,
 		const Vector4 &p_plane_normal, float p_plane_d,
@@ -70,4 +74,5 @@ public:
 		const Vector4 &p_camera_origin);
 
 	int get_instance_count() const { return _instances.size(); }
+	Transform3D get_camera_3d_transform() const { return _camera_3d_transform; }
 };

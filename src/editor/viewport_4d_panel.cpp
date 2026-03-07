@@ -1,6 +1,9 @@
 #include "viewport_4d_panel.h"
+#include "../nodes/camera_4d.h"
+#include "../slicer/slicer_4d.h"
 
 #include <godot_cpp/classes/control.hpp>
+#include <godot_cpp/classes/editor_interface.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/callable.hpp>
 
@@ -64,6 +67,7 @@ void Viewport4DPanel::_on_w_spinbox_changed(double p_value) {
 	if (_w_slider) {
 		_w_slider->set_value_no_signal(p_value);
 	}
+	_apply_w_to_cameras();
 }
 
 void Viewport4DPanel::_on_w_slider_changed(double p_value) {
@@ -71,9 +75,33 @@ void Viewport4DPanel::_on_w_slider_changed(double p_value) {
 	if (_w_spinbox) {
 		_w_spinbox->set_value_no_signal(p_value);
 	}
+	_apply_w_to_cameras();
 }
 
 void Viewport4DPanel::set_w_position(real_t p_w) {
 	_w_position = p_w;
 	_sync_controls(static_cast<double>(p_w));
+	_apply_w_to_cameras();
+}
+
+Camera4D *Viewport4DPanel::_find_camera_in(Node *p_node) const {
+	if (!p_node) return nullptr;
+	Camera4D *cam = Object::cast_to<Camera4D>(p_node);
+	if (cam) return cam;
+	for (int i = 0; i < p_node->get_child_count(); i++) {
+		cam = _find_camera_in(p_node->get_child(i));
+		if (cam) return cam;
+	}
+	return nullptr;
+}
+
+void Viewport4DPanel::_apply_w_to_cameras() {
+	Node *root = EditorInterface::get_singleton()->get_edited_scene_root();
+	Camera4D *cam = _find_camera_in(root);
+	if (cam) {
+		cam->set_slice_offset(_w_position);
+	}
+	if (Slicer4D::get_singleton()) {
+		Slicer4D::get_singleton()->mark_all_dirty();
+	}
 }
