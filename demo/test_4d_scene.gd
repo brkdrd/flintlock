@@ -1,4 +1,3 @@
-@tool
 ## test_4d_scene.gd
 ## Attach to a plain Node in a scene. On _ready it builds a 4D scene with:
 ##   - a HyperSphereMesh4D at the 4D origin

@@ -235,17 +235,6 @@ void Slicer4D::slice_all(const Vector4 &p_plane_normal, float p_plane_d,
 	const PackedFloat32Array &p_basis_cols,
 	const Vector4 &p_camera_origin) {
 
-	// Compute camera's equivalent 3D transform from basis columns and origin.
-	// This places sliced geometry in world 3D space so the editor camera can see it.
-	_camera_3d_transform = Transform3D(
-		Basis(
-			Vector3(p_basis_cols[0], p_basis_cols[1], p_basis_cols[2]),   // X axis
-			Vector3(p_basis_cols[4], p_basis_cols[5], p_basis_cols[6]),   // Y axis
-			Vector3(p_basis_cols[8], p_basis_cols[9], p_basis_cols[10])   // Z axis
-		),
-		Vector3(p_camera_origin.x, p_camera_origin.y, p_camera_origin.z)
-	);
-
 	// Check if plane changed - if so, mark all dirty
 	if (p_plane_normal != _cached_plane_normal || p_plane_d != _cached_plane_d) {
 		mark_all_dirty();

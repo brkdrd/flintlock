@@ -138,12 +138,8 @@ void VisualInstance4D::update_rendering_mesh(
 		rs->mesh_surface_set_material(_rs_mesh, 0, mat->get_rid());
 	}
 
-	// Place camera-relative geometry into world 3D space using camera's 3D transform.
-	Transform3D cam_xform;
-	if (Slicer4D::get_singleton()) {
-		cam_xform = Slicer4D::get_singleton()->get_camera_3d_transform();
-	}
-	rs->instance_set_transform(_rs_instance, cam_xform);
+	// Geometry is already in camera-relative 3D coords, so identity transform
+	rs->instance_set_transform(_rs_instance, Transform3D());
 }
 
 void VisualInstance4D::clear_rendering_mesh() {

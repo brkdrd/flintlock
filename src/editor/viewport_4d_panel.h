@@ -6,11 +6,8 @@
 #include <godot_cpp/classes/spin_box.hpp>
 #include <godot_cpp/classes/h_slider.hpp>
 #include <godot_cpp/classes/button.hpp>
-#include <godot_cpp/classes/editor_interface.hpp>
 
 using namespace godot;
-
-class Camera4D;
 
 class Viewport4DPanel : public VBoxContainer {
 	GDCLASS(Viewport4DPanel, VBoxContainer);
@@ -22,9 +19,8 @@ class Viewport4DPanel : public VBoxContainer {
 
 	real_t _w_position = 0.0f;
 
+	// Internal helper: sync both controls to the given value without re-triggering signals.
 	void _sync_controls(double p_value);
-	void _apply_w_to_cameras();
-	Camera4D *_find_camera_in(Node *p_node) const;
 
 protected:
 	static void _bind_methods();
