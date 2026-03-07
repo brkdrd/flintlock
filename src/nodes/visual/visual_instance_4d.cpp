@@ -132,6 +132,12 @@ void VisualInstance4D::update_rendering_mesh(
 
 	rs->mesh_add_surface_from_arrays(_rs_mesh, RenderingServer::PRIMITIVE_TRIANGLES, arrays);
 
+	// Apply material from Material4D (if any)
+	Ref<Material> mat = get_active_material_3d();
+	if (mat.is_valid()) {
+		rs->mesh_surface_set_material(_rs_mesh, 0, mat->get_rid());
+	}
+
 	// Geometry is already in camera-relative 3D coords, so identity transform
 	rs->instance_set_transform(_rs_instance, Transform3D());
 }

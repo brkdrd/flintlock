@@ -21,3 +21,10 @@ void GeometryInstance4D::set_material_override(const Ref<Material4D> &p_material
 void GeometryInstance4D::set_transparency(real_t p_transparency) {
 	_transparency = p_transparency;
 }
+
+Ref<Material> GeometryInstance4D::get_active_material_3d() const {
+	if (_material_override.is_valid()) {
+		return _material_override->get_standard_material();
+	}
+	return Ref<Material>();
+}

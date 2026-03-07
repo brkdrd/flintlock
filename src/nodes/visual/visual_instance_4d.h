@@ -30,6 +30,9 @@ public:
 	// Called by Slicer4D to get the 4D mesh data
 	virtual Ref<Mesh4D> get_mesh_4d() const { return Ref<Mesh4D>(); }
 
+	// Returns the StandardMaterial3D to apply to the sliced 3D surface (if any)
+	virtual Ref<Material> get_active_material_3d() const { return Ref<Material>(); }
+
 	// Marks slicer dirty when transform changes (virtual override from Node4D)
 	void _on_transform_4d_changed() override;
 
