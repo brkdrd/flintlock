@@ -12,7 +12,7 @@ using namespace godot;
 //   1. 4D: Its Transform4D defines the slice hyperplane. W column = slice normal.
 //   2. 3D: Owns an internal Camera3D that renders the sliced scene.
 //
-// Each frame, calls Slicer4D::slice_all() with the current hyperplane.
+// Each frame, calls Slicer4D::update_frame() with the current hyperplane.
 class Camera4D : public Node4D {
 	GDCLASS(Camera4D, Node4D);
 

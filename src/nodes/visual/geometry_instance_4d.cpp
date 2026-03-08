@@ -13,9 +13,7 @@ void GeometryInstance4D::_bind_methods() {
 
 void GeometryInstance4D::set_material_override(const Ref<Material4D> &p_material) {
 	_material_override = p_material;
-	if (Slicer4D::get_singleton()) {
-		Slicer4D::get_singleton()->mark_dirty(this);
-	}
+	apply_material_params();
 }
 
 void GeometryInstance4D::set_transparency(real_t p_transparency) {

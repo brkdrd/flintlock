@@ -117,8 +117,8 @@ void AnimatedSprite4D::_advance_frame(double p_delta) {
 		_mesh_dirty = true;
 	}
 
-	if (_mesh_dirty && Slicer4D::get_singleton()) {
-		Slicer4D::get_singleton()->mark_dirty(this);
+	if (_mesh_dirty) {
+		upload_gpu_mesh();
 	}
 }
 
@@ -154,7 +154,7 @@ void AnimatedSprite4D::set_sprite_frames(const Ref<SpriteFrames4D> &p_frames) {
 	_frame_progress = 0.0f;
 	_frame_texture_dirty = true;
 	_mesh_dirty = true;
-	if (Slicer4D::get_singleton()) Slicer4D::get_singleton()->mark_dirty(this);
+	upload_gpu_mesh();
 }
 
 void AnimatedSprite4D::set_animation(const StringName &p_animation) {
@@ -164,7 +164,7 @@ void AnimatedSprite4D::set_animation(const StringName &p_animation) {
 	_frame_progress = 0.0f;
 	_frame_texture_dirty = true;
 	_mesh_dirty = true;
-	if (Slicer4D::get_singleton()) Slicer4D::get_singleton()->mark_dirty(this);
+	upload_gpu_mesh();
 }
 
 void AnimatedSprite4D::set_frame(int p_frame) {
@@ -174,7 +174,7 @@ void AnimatedSprite4D::set_frame(int p_frame) {
 	_frame_texture_dirty = true;
 	_mesh_dirty = true;
 	emit_signal("frame_changed");
-	if (Slicer4D::get_singleton()) Slicer4D::get_singleton()->mark_dirty(this);
+	upload_gpu_mesh();
 }
 
 void AnimatedSprite4D::set_frame_progress(float p_progress) {
@@ -217,7 +217,7 @@ void AnimatedSprite4D::stop() {
 	_frame_texture_dirty = true;
 	_mesh_dirty = true;
 	if (is_inside_tree()) set_process(false);
-	if (Slicer4D::get_singleton()) Slicer4D::get_singleton()->mark_dirty(this);
+	upload_gpu_mesh();
 }
 
 void AnimatedSprite4D::set_loop(bool p_loop) {

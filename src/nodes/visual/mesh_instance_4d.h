@@ -26,4 +26,7 @@ public:
 
 	// Override from VisualInstance4D - provides mesh data to Slicer4D
 	Ref<Mesh4D> get_mesh_4d() const override { return _mesh; }
+
+private:
+	void _on_mesh_changed();
 };

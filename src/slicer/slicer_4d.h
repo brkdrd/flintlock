@@ -1,26 +1,29 @@
 #pragma once
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
-#include <godot_cpp/classes/rendering_device.hpp>
+#include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/templates/vector.hpp>
-#include <godot_cpp/templates/hash_set.hpp>
 
 using namespace godot;
 
-// Forward declarations
 class VisualInstance4D;
 
 // ============================================================
-// Slicer4D Singleton
+// Slicer4D Singleton — GPU vertex-shader based 4D→3D slicing
 //
-// Central GPU compute pipeline for slicing 4D geometry into 3D.
-// Every VisualInstance4D registers with this singleton.
-// Each frame, Camera4D calls slice_all() with the current hyperplane.
-// The slicer produces 3D triangle data and updates each instance's
-// RenderingServer mesh RID.
+// Architecture (inspired by HackerPoet/Engine4D):
+//   - Each tetrahedron's 4 vertices are packed into GPU vertex
+//     attributes (VERTEX + CUSTOM0-3) and uploaded ONCE.
+//   - A custom spatial shader performs per-vertex slicing:
+//     1. Transform 4D verts by per-instance model matrix
+//     2. Compute signed distance to the slice hyperplane
+//     3. LUT lookup to find which edge to interpolate
+//     4. Lerp along edge to find the w=0 intersection
+//     5. Project 4D intersection to 3D via camera basis
+//   - Per frame, only uniform updates happen (no CPU mesh work).
 // ============================================================
 class Slicer4D : public Object {
 	GDCLASS(Slicer4D, Object);
@@ -29,22 +32,16 @@ class Slicer4D : public Object {
 
 	// Registered visual instances
 	Vector<VisualInstance4D *> _instances;
-	HashSet<VisualInstance4D *> _dirty_set;
 
-	// GPU compute resources
-	RID _compute_shader;
-	RID _compute_pipeline;
-	bool _pipeline_initialized = false;
+	// GPU resources
+	RID _shader_rid;
+	RID _material_rid;
+	Ref<ImageTexture> _lut_texture;
+	bool _initialized = false;
 
-	// Cached slice state to detect changes
-	Vector4 _cached_plane_normal = Vector4(0, 0, 0, 1);
-	float _cached_plane_d = 0.0f;
-
-	void _initialize_pipeline();
-	void _slice_instance_cpu(VisualInstance4D *p_instance,
-		const Vector4 &p_plane_normal, float p_plane_d,
-		const PackedFloat32Array &p_basis_cols,
-		const Vector4 &p_camera_origin);
+	void _initialize();
+	void _generate_lut();
+	String _get_shader_code() const;
 
 protected:
 	static void _bind_methods();
@@ -57,17 +54,15 @@ public:
 
 	void register_instance(VisualInstance4D *p_instance);
 	void unregister_instance(VisualInstance4D *p_instance);
-	void mark_dirty(VisualInstance4D *p_instance);
-	void mark_all_dirty();
 
-	// Called by Camera4D every frame to slice all dirty instances.
-	// p_basis_cols: 12 floats = 3 Vector4s (columns 0,1,2 of camera basis)
-	// p_plane_normal: W column of camera basis (hyperplane normal)
-	// p_plane_d: dot(p_plane_normal, camera_origin)
-	// p_camera_origin: 4D camera position
-	void slice_all(const Vector4 &p_plane_normal, float p_plane_d,
+	// Called by Camera4D every frame. Updates shader uniforms only.
+	void update_frame(const Vector4 &p_plane_normal, float p_plane_d,
 		const PackedFloat32Array &p_basis_cols,
 		const Vector4 &p_camera_origin);
+
+	RID get_material_rid();
+	bool is_initialized() const { return _initialized; }
+	void ensure_initialized();
 
 	int get_instance_count() const { return _instances.size(); }
 };

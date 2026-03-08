@@ -9,29 +9,39 @@ void MeshInstance4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_surface_material_count"), &MeshInstance4D::get_surface_material_count);
 
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "mesh", PROPERTY_HINT_RESOURCE_TYPE, "Mesh4D"), "set_mesh", "get_mesh");
+
+	ClassDB::bind_method(D_METHOD("_on_mesh_changed"), &MeshInstance4D::_on_mesh_changed);
 }
 
 void MeshInstance4D::_notification(int p_what) {
 	GeometryInstance4D::_notification(p_what);
 
 	if (p_what == NOTIFICATION_ENTER_TREE) {
-		// Re-register with slicer when entering tree (parent already creates RIDs)
-		if (_mesh.is_valid() && Slicer4D::get_singleton()) {
-			Slicer4D::get_singleton()->mark_dirty(this);
-		}
+		// Parent already creates RIDs and calls upload_gpu_mesh().
+		// Apply material params for this instance.
+		apply_material_params();
 	}
 }
 
 void MeshInstance4D::set_mesh(const Ref<Mesh4D> &p_mesh) {
 	if (_mesh == p_mesh) return;
+	// Disconnect from old mesh's changed signal
+	if (_mesh.is_valid() && _mesh->is_connected("changed", Callable(this, "_on_mesh_changed"))) {
+		_mesh->disconnect("changed", Callable(this, "_on_mesh_changed"));
+	}
 	_mesh = p_mesh;
-	// Resize surface materials array
+	// Connect to new mesh's changed signal and resize materials
 	if (_mesh.is_valid()) {
+		_mesh->connect("changed", Callable(this, "_on_mesh_changed"));
 		_surface_materials.resize(_mesh->get_surface_count());
 	}
-	if (Slicer4D::get_singleton()) {
-		Slicer4D::get_singleton()->mark_dirty(this);
-	}
+	// Re-upload mesh data to GPU
+	upload_gpu_mesh();
+}
+
+void MeshInstance4D::_on_mesh_changed() {
+	// Mesh resource properties changed (e.g. radius) — re-upload to GPU
+	upload_gpu_mesh();
 }
 
 Ref<Material4D> MeshInstance4D::get_surface_material(int p_surface) const {
@@ -43,9 +53,7 @@ void MeshInstance4D::set_surface_material(int p_surface, const Ref<Material4D> &
 	if (p_surface < 0) return;
 	if (p_surface >= _surface_materials.size()) _surface_materials.resize(p_surface + 1);
 	_surface_materials[p_surface] = p_material;
-	if (Slicer4D::get_singleton()) {
-		Slicer4D::get_singleton()->mark_dirty(this);
-	}
+	apply_material_params();
 }
 
 int MeshInstance4D::get_surface_material_count() const {

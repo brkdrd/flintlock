@@ -2,16 +2,14 @@
 #include "../nodes/visual/visual_instance_4d.h"
 #include "../resources/mesh_4d.h"
 #include <godot_cpp/classes/rendering_server.hpp>
-#include <godot_cpp/core/math.hpp>
-#include <cmath>
+#include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/image_texture.hpp>
 
 Slicer4D *Slicer4D::singleton = nullptr;
 
 void Slicer4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("register_instance", "instance"), &Slicer4D::register_instance);
 	ClassDB::bind_method(D_METHOD("unregister_instance", "instance"), &Slicer4D::unregister_instance);
-	ClassDB::bind_method(D_METHOD("mark_dirty", "instance"), &Slicer4D::mark_dirty);
-	ClassDB::bind_method(D_METHOD("mark_all_dirty"), &Slicer4D::mark_all_dirty);
 	ClassDB::bind_method(D_METHOD("get_instance_count"), &Slicer4D::get_instance_count);
 }
 
@@ -20,6 +18,11 @@ Slicer4D::Slicer4D() {
 }
 
 Slicer4D::~Slicer4D() {
+	RenderingServer *rs = RenderingServer::get_singleton();
+	if (rs) {
+		if (_material_rid.is_valid()) rs->free_rid(_material_rid);
+		if (_shader_rid.is_valid()) rs->free_rid(_shader_rid);
+	}
 	singleton = nullptr;
 }
 
@@ -30,223 +33,275 @@ Slicer4D *Slicer4D::get_singleton() {
 void Slicer4D::register_instance(VisualInstance4D *p_instance) {
 	if (!_instances.has(p_instance)) {
 		_instances.push_back(p_instance);
-		_dirty_set.insert(p_instance);
 	}
 }
 
 void Slicer4D::unregister_instance(VisualInstance4D *p_instance) {
 	_instances.erase(p_instance);
-	_dirty_set.erase(p_instance);
 }
 
-void Slicer4D::mark_dirty(VisualInstance4D *p_instance) {
-	_dirty_set.insert(p_instance);
-}
+// ============================================================
+// LUT Generation
+//
+// 8 columns x 16 rows, RGBA8.
+// Row = sign_bits of 4 tet vertices (bit0=A, bit1=B, bit2=C, bit3=D)
+// Column = gpu_vertex_id (0..5, columns 6-7 unused)
+//
+// Each tetrahedron produces 6 GPU vertices (2 triangles).
+// For triangle intersections (3 crossing edges): verts 0-2 used, 3-5 degenerate.
+// For quad intersections (4 crossing edges): all 6 used (2 tris from quad).
+//
+// R = endpoint_a index (0-3), G = endpoint_b index (0-3).
+// Value 255 = degenerate (no intersection for this vertex).
+// ============================================================
+void Slicer4D::_generate_lut() {
+	// Edges of a tetrahedron: (0,1),(0,2),(0,3),(1,2),(1,3),(2,3)
+	static const int edges[6][2] = {{0,1},{0,2},{0,3},{1,2},{1,3},{2,3}};
 
-void Slicer4D::mark_all_dirty() {
-	for (VisualInstance4D *inst : _instances) {
-		_dirty_set.insert(inst);
-	}
-}
+	// 8 wide x 16 tall
+	PackedByteArray data;
+	data.resize(8 * 16 * 4); // RGBA8
+	for (int i = 0; i < data.size(); i++) data[i] = 255;
 
-// CPU-based tetrahedron-hyperplane intersection for one instance.
-// For each tetrahedron in the mesh, compute intersection with the hyperplane.
-void Slicer4D::_slice_instance_cpu(VisualInstance4D *p_instance,
-	const Vector4 &p_plane_normal, float p_plane_d,
-	const PackedFloat32Array &p_basis_cols,
-	const Vector4 &p_camera_origin) {
+	for (int sign_bits = 0; sign_bits < 16; sign_bits++) {
+		if (sign_bits == 0 || sign_bits == 15) continue; // all same side
 
-	Ref<Mesh4D> mesh = p_instance->get_mesh_4d();
-	if (mesh.is_null() || mesh->get_surface_count() == 0) return;
-
-	// Basis columns: col0 = basis_cols[0..3], col1 = basis_cols[4..7], col2 = basis_cols[8..11]
-	Vector4 col0(p_basis_cols[0], p_basis_cols[1], p_basis_cols[2], p_basis_cols[3]);
-	Vector4 col1(p_basis_cols[4], p_basis_cols[5], p_basis_cols[6], p_basis_cols[7]);
-	Vector4 col2(p_basis_cols[8], p_basis_cols[9], p_basis_cols[10], p_basis_cols[11]);
-
-	// Output 3D vertices and indices
-	PackedFloat32Array out_verts, out_normals, out_uvs;
-	PackedInt32Array out_indices;
-	int tri_idx = 0;
-
-	// Process each surface
-	for (int surf = 0; surf < mesh->get_surface_count(); surf++) {
-		Array arrays = mesh->get_surface_arrays(surf);
-		if (arrays.size() < Mesh4D::ARRAY_MAX) continue;
-
-		PackedFloat32Array verts4d = arrays[Mesh4D::ARRAY_VERTEX];
-		PackedFloat32Array norms4d = arrays[Mesh4D::ARRAY_NORMAL];
-		PackedInt32Array indices4d = arrays[Mesh4D::ARRAY_INDEX];
-
-		if (verts4d.is_empty() || indices4d.is_empty()) continue;
-
-		// Apply instance 4D transform to vertices and normals
-		Ref<Transform4D> gt = p_instance->get_global_transform_4d();
-		Ref<Basis4D> basis = gt->get_basis();
-		Ref<Vector4D> origin = gt->get_origin();
-		float ox = origin->x, oy = origin->y, oz = origin->z, ow = origin->w;
-
-		PackedFloat32Array world_verts;
-		int vert_count = verts4d.size() / 4;
-		world_verts.resize(verts4d.size());
-		for (int vi = 0; vi < vert_count; vi++) {
-			float lx = verts4d[vi * 4], ly = verts4d[vi * 4 + 1];
-			float lz = verts4d[vi * 4 + 2], lw = verts4d[vi * 4 + 3];
-			// basis * local + origin (column-major: data[col][row])
-			world_verts[vi * 4 + 0] = basis->data[0][0] * lx + basis->data[1][0] * ly + basis->data[2][0] * lz + basis->data[3][0] * lw + ox;
-			world_verts[vi * 4 + 1] = basis->data[0][1] * lx + basis->data[1][1] * ly + basis->data[2][1] * lz + basis->data[3][1] * lw + oy;
-			world_verts[vi * 4 + 2] = basis->data[0][2] * lx + basis->data[1][2] * ly + basis->data[2][2] * lz + basis->data[3][2] * lw + oz;
-			world_verts[vi * 4 + 3] = basis->data[0][3] * lx + basis->data[1][3] * ly + basis->data[2][3] * lz + basis->data[3][3] * lw + ow;
+		// Find crossing edges
+		int crossing[6][2];
+		int cross_count = 0;
+		for (int e = 0; e < 6; e++) {
+			int a = edges[e][0], b = edges[e][1];
+			int sa = (sign_bits >> a) & 1;
+			int sb = (sign_bits >> b) & 1;
+			if (sa != sb) {
+				crossing[cross_count][0] = a;
+				crossing[cross_count][1] = b;
+				cross_count++;
+			}
 		}
 
-		PackedFloat32Array world_norms;
-		int norm_count = norms4d.size() / 4;
-		world_norms.resize(norms4d.size());
-		for (int ni = 0; ni < norm_count; ni++) {
-			float lx = norms4d[ni * 4], ly = norms4d[ni * 4 + 1];
-			float lz = norms4d[ni * 4 + 2], lw = norms4d[ni * 4 + 3];
-			// Normals: basis only (no translation)
-			world_norms[ni * 4 + 0] = basis->data[0][0] * lx + basis->data[1][0] * ly + basis->data[2][0] * lz + basis->data[3][0] * lw;
-			world_norms[ni * 4 + 1] = basis->data[0][1] * lx + basis->data[1][1] * ly + basis->data[2][1] * lz + basis->data[3][1] * lw;
-			world_norms[ni * 4 + 2] = basis->data[0][2] * lx + basis->data[1][2] * ly + basis->data[2][2] * lz + basis->data[3][2] * lw;
-			world_norms[ni * 4 + 3] = basis->data[0][3] * lx + basis->data[1][3] * ly + basis->data[2][3] * lz + basis->data[3][3] * lw;
-		}
-
-		// Process each tetrahedron (4 indices)
-		int tet_count = indices4d.size() / 4;
-		for (int t = 0; t < tet_count; t++) {
-			int i0 = indices4d[t * 4 + 0];
-			int i1 = indices4d[t * 4 + 1];
-			int i2 = indices4d[t * 4 + 2];
-			int i3 = indices4d[t * 4 + 3];
-
-			// Get 4D vertices
-			Vector4 v[4];
-			int vis[4] = {i0, i1, i2, i3};
-			for (int k = 0; k < 4; k++) {
-				int idx = vis[k] * 4;
-				if (idx + 3 >= world_verts.size()) { v[k] = Vector4(); continue; }
-				v[k] = Vector4(world_verts[idx], world_verts[idx+1], world_verts[idx+2], world_verts[idx+3]);
+		if (cross_count == 3) {
+			// Triangle: vertices 0,1,2 get the 3 edges; 3,4,5 degenerate
+			for (int v = 0; v < 3; v++) {
+				int px = v;
+				int py = sign_bits;
+				int off = (py * 8 + px) * 4;
+				data[off + 0] = crossing[v][0];
+				data[off + 1] = crossing[v][1];
+				data[off + 2] = 0;
+				data[off + 3] = 255;
 			}
+		} else if (cross_count == 4) {
+			// Quad: need to order the 4 crossing edges into a proper polygon.
+			// The edge enumeration order {(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)}
+			// produces crossings where indices 2 and 3 are swapped relative to
+			// correct cyclic order. Swap them.
+			int tmp0 = crossing[2][0], tmp1 = crossing[2][1];
+			crossing[2][0] = crossing[3][0]; crossing[2][1] = crossing[3][1];
+			crossing[3][0] = tmp0; crossing[3][1] = tmp1;
 
-			// Get 4D normals (transformed)
-			Vector4 n[4];
-			for (int k = 0; k < 4; k++) {
-				int idx = vis[k] * 4;
-				if (world_norms.size() > idx + 3) {
-					n[k] = Vector4(world_norms[idx], world_norms[idx+1], world_norms[idx+2], world_norms[idx+3]);
-				}
-			}
-
-			// Compute signed distances to hyperplane
-			float d[4];
-			for (int k = 0; k < 4; k++) {
-				d[k] = p_plane_normal.dot(v[k]) - p_plane_d;
-			}
-
-			// Classify vertices
-			int pos_count = 0, neg_count = 0;
-			for (int k = 0; k < 4; k++) {
-				if (d[k] > 0.0001f) pos_count++;
-				else if (d[k] < -0.0001f) neg_count++;
-			}
-
-			if (pos_count == 4 || neg_count == 4) continue; // No intersection
-
-			// Find edge intersections
-			// Edges of a tetrahedron: (0,1),(0,2),(0,3),(1,2),(1,3),(2,3) = 6 edges
-			Vector4 inter_pts[6];
-			Vector4 inter_nrm[6];
-			int inter_count = 0;
-
-			static const int edges[6][2] = {{0,1},{0,2},{0,3},{1,2},{1,3},{2,3}};
-			for (int e = 0; e < 6; e++) {
-				int a = edges[e][0], b = edges[e][1];
-				if ((d[a] > 0) == (d[b] > 0)) continue; // Same side
-				if (Math::abs(d[a] - d[b]) < 1e-8f) continue;
-				float t = d[a] / (d[a] - d[b]);
-				inter_pts[inter_count] = v[a].lerp(v[b], t);
-				inter_nrm[inter_count] = n[a].lerp(n[b], t);
-				inter_count++;
-			}
-
-			if (inter_count < 3) continue;
-
-			// For quad case (inter_count == 4), the edge enumeration order
-			// {(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)} always produces points
-			// where [2] and [3] are swapped relative to the correct cyclic
-			// polygon order. Swap them to avoid bowtie self-intersection.
-			if (inter_count == 4) {
-				Vector4 tmp_p = inter_pts[2]; inter_pts[2] = inter_pts[3]; inter_pts[3] = tmp_p;
-				Vector4 tmp_n = inter_nrm[2]; inter_nrm[2] = inter_nrm[3]; inter_nrm[3] = tmp_n;
-			}
-
-			// Project intersection points to world 3D space.
-			// Position is determined solely by the 4D object's position (no camera subtraction).
-			auto project_to_3d = [&](const Vector4 &p4) -> Vector3 {
-				return Vector3(col0.dot(p4), col1.dot(p4), col2.dot(p4));
+			// Two triangles: (0,1,2) and (0,2,3)
+			int tri_verts[6][2] = {
+				{crossing[0][0], crossing[0][1]},
+				{crossing[1][0], crossing[1][1]},
+				{crossing[2][0], crossing[2][1]},
+				{crossing[0][0], crossing[0][1]},
+				{crossing[2][0], crossing[2][1]},
+				{crossing[3][0], crossing[3][1]},
 			};
-
-			auto project_normal_to_3d = [&](const Vector4 &n4) -> Vector3 {
-				return Vector3(col0.dot(n4), col1.dot(n4), col2.dot(n4)).normalized();
-			};
-
-			// Output triangle(s) via fan triangulation with winding correction
-			for (int k = 1; k < inter_count - 1; k++) {
-				Vector3 p3[3] = {
-					project_to_3d(inter_pts[0]),
-					project_to_3d(inter_pts[k]),
-					project_to_3d(inter_pts[k + 1])
-				};
-				Vector3 n3[3] = {
-					project_normal_to_3d(inter_nrm[0]),
-					project_normal_to_3d(inter_nrm[k]),
-					project_normal_to_3d(inter_nrm[k + 1])
-				};
-
-				// Fix winding: face normal should agree with surface normal
-				Vector3 face_normal = (p3[1] - p3[0]).cross(p3[2] - p3[0]);
-				Vector3 avg_n = n3[0] + n3[1] + n3[2];
-				if (face_normal.dot(avg_n) < 0.0f) {
-					Vector3 tmp3 = p3[1]; p3[1] = p3[2]; p3[2] = tmp3;
-					tmp3 = n3[1]; n3[1] = n3[2]; n3[2] = tmp3;
-				}
-
-				for (int p = 0; p < 3; p++) {
-					out_verts.push_back(p3[p].x); out_verts.push_back(p3[p].y); out_verts.push_back(p3[p].z);
-					out_normals.push_back(n3[p].x); out_normals.push_back(n3[p].y); out_normals.push_back(n3[p].z);
-					out_uvs.push_back(0.0f); out_uvs.push_back(0.0f);
-					out_indices.push_back(tri_idx++);
-				}
+			for (int v = 0; v < 6; v++) {
+				int px = v;
+				int py = sign_bits;
+				int off = (py * 8 + px) * 4;
+				data[off + 0] = tri_verts[v][0];
+				data[off + 1] = tri_verts[v][1];
+				data[off + 2] = 0;
+				data[off + 3] = 255;
 			}
 		}
 	}
 
-	// Upload to RenderingServer
-	if (out_indices.is_empty()) {
-		p_instance->clear_rendering_mesh();
+	Ref<Image> img = Image::create_from_data(8, 16, false, Image::FORMAT_RGBA8, data);
+	_lut_texture = ImageTexture::create_from_image(img);
+}
+
+// ============================================================
+// Shader Code
+// ============================================================
+String Slicer4D::_get_shader_code() const {
+	return R"(
+shader_type spatial;
+render_mode cull_disabled, skip_vertex_transform;
+
+// Global uniforms (set by Slicer4D per frame)
+uniform mat4 camera_basis_4d;
+uniform vec4 camera_origin_4d;
+uniform vec4 slice_normal;
+uniform float slice_d;
+uniform sampler2D lut_texture : filter_nearest, repeat_disable;
+
+// Per-instance uniforms
+instance uniform mat4 model_4d_basis;
+instance uniform vec4 model_4d_origin;
+instance uniform vec4 albedo_color : source_color = vec4(1.0);
+instance uniform float roughness_value = 1.0;
+instance uniform float metallic_value = 0.0;
+
+varying vec3 world_pos;
+
+void vertex() {
+	// Reconstruct 4 tetrahedron vertices from packed attributes
+	vec4 va = vec4(VERTEX.x, VERTEX.y, VERTEX.z, CUSTOM0.x);
+	vec4 vb = vec4(CUSTOM0.y, CUSTOM0.z, CUSTOM0.w, CUSTOM1.x);
+	vec4 vc = vec4(CUSTOM1.y, CUSTOM1.z, CUSTOM1.w, CUSTOM2.x);
+	vec4 vd = vec4(CUSTOM2.y, CUSTOM2.z, CUSTOM2.w, CUSTOM3.x);
+	int vertex_id = int(CUSTOM3.y + 0.5);
+
+	// Apply 4D model transform
+	vec4 wa = model_4d_basis * va + model_4d_origin;
+	vec4 wb = model_4d_basis * vb + model_4d_origin;
+	vec4 wc = model_4d_basis * vc + model_4d_origin;
+	vec4 wd = model_4d_basis * vd + model_4d_origin;
+
+	// Signed distances to hyperplane
+	float da = dot(slice_normal, wa) - slice_d;
+	float db = dot(slice_normal, wb) - slice_d;
+	float dc = dot(slice_normal, wc) - slice_d;
+	float dd = dot(slice_normal, wd) - slice_d;
+
+	// Build sign bits: bit0=A, bit1=B, bit2=C, bit3=D
+	int sign_bits = (da > 0.0 ? 1 : 0) | (db > 0.0 ? 2 : 0) | (dc > 0.0 ? 4 : 0) | (dd > 0.0 ? 8 : 0);
+
+	// LUT lookup
+	vec4 lut_val = texture(lut_texture, vec2((float(vertex_id) + 0.5) / 8.0, (float(sign_bits) + 0.5) / 16.0));
+	int ep_a = int(lut_val.r * 255.0 + 0.5);
+	int ep_b = int(lut_val.g * 255.0 + 0.5);
+
+	// Degenerate check — collapse to produce zero-area triangle
+	if (ep_a > 3 || ep_b > 3) {
+		VERTEX = vec3(0.0, 0.0, 0.0);
+		POSITION = vec4(0.0, 0.0, 0.0, 1.0);
 		return;
 	}
 
-	p_instance->update_rendering_mesh(out_verts, out_normals, out_uvs, out_indices);
+	// Select the two 4D endpoints and their distances
+	vec4 endpoints[4] = vec4[4](wa, wb, wc, wd);
+	float dists[4] = float[4](da, db, dc, dd);
+
+	vec4 p0 = endpoints[ep_a];
+	vec4 p1 = endpoints[ep_b];
+	float d0 = dists[ep_a];
+	float d1 = dists[ep_b];
+
+	// Interpolate to find hyperplane crossing (where distance = 0)
+	float t = d0 / (d0 - d1);
+	vec4 intersection_4d = mix(p0, p1, t);
+
+	// Project 4D intersection to 3D using camera basis columns 0,1,2
+	vec3 pos_3d;
+	pos_3d.x = dot(camera_basis_4d[0], intersection_4d);
+	pos_3d.y = dot(camera_basis_4d[1], intersection_4d);
+	pos_3d.z = dot(camera_basis_4d[2], intersection_4d);
+
+	world_pos = pos_3d;
+	VERTEX = pos_3d;
+
+	// Transform through Godot's view/projection pipeline
+	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(pos_3d, 1.0);
+
+	// Placeholder normal (computed in fragment via derivatives)
+	NORMAL = vec3(0.0, 1.0, 0.0);
 }
 
-void Slicer4D::slice_all(const Vector4 &p_plane_normal, float p_plane_d,
+void fragment() {
+	// Compute flat normal from screen-space derivatives of world position
+	vec3 dx = dFdx(world_pos);
+	vec3 dy = dFdy(world_pos);
+	vec3 n = normalize(cross(dx, dy));
+
+	// Ensure normal faces the camera
+	if (dot(n, VIEW_MATRIX[2].xyz) > 0.0) {
+		n = -n;
+	}
+
+	NORMAL = (VIEW_MATRIX * vec4(n, 0.0)).xyz;
+	ALBEDO = albedo_color.rgb;
+	ROUGHNESS = roughness_value;
+	METALLIC = metallic_value;
+}
+)";
+}
+
+// ============================================================
+// Initialization
+// ============================================================
+void Slicer4D::_initialize() {
+	if (_initialized) return;
+
+	_generate_lut();
+
+	RenderingServer *rs = RenderingServer::get_singleton();
+	_shader_rid = rs->shader_create();
+	rs->shader_set_code(_shader_rid, _get_shader_code());
+
+	_material_rid = rs->material_create();
+	rs->material_set_shader(_material_rid, _shader_rid);
+
+	// Set LUT texture on the shared material
+	rs->material_set_param(_material_rid, "lut_texture", _lut_texture);
+
+	// Set defaults for global uniforms
+	Projection identity;
+	rs->material_set_param(_material_rid, "camera_basis_4d", identity);
+	rs->material_set_param(_material_rid, "camera_origin_4d", Vector4(0, 0, 0, 0));
+	rs->material_set_param(_material_rid, "slice_normal", Vector4(0, 0, 0, 1));
+	rs->material_set_param(_material_rid, "slice_d", 0.0f);
+
+	_initialized = true;
+}
+
+void Slicer4D::ensure_initialized() {
+	_initialize();
+}
+
+RID Slicer4D::get_material_rid() {
+	ensure_initialized();
+	return _material_rid;
+}
+
+// ============================================================
+// Per-frame update — sets global shader uniforms only
+// ============================================================
+void Slicer4D::update_frame(const Vector4 &p_plane_normal, float p_plane_d,
 	const PackedFloat32Array &p_basis_cols,
 	const Vector4 &p_camera_origin) {
 
-	// Check if plane changed - if so, mark all dirty
-	if (p_plane_normal != _cached_plane_normal || p_plane_d != _cached_plane_d) {
-		mark_all_dirty();
-		_cached_plane_normal = p_plane_normal;
-		_cached_plane_d = p_plane_d;
-	}
+	if (!_initialized) _initialize();
 
-	// Process dirty instances
+	RenderingServer *rs = RenderingServer::get_singleton();
+
+	// Update global uniforms on the shared material
+	rs->material_set_param(_material_rid, "slice_normal", p_plane_normal);
+	rs->material_set_param(_material_rid, "slice_d", p_plane_d);
+	rs->material_set_param(_material_rid, "camera_origin_4d", p_camera_origin);
+
+	// Pack camera basis as a Projection (mat4): columns 0-3 of the 4D camera basis
+	// p_basis_cols has 12 floats (3 columns x 4 components).
+	// Column 3 = slice_normal (already set separately).
+	Projection cam_basis;
+	// Column 0
+	cam_basis.columns[0] = Vector4(p_basis_cols[0], p_basis_cols[1], p_basis_cols[2], p_basis_cols[3]);
+	// Column 1
+	cam_basis.columns[1] = Vector4(p_basis_cols[4], p_basis_cols[5], p_basis_cols[6], p_basis_cols[7]);
+	// Column 2
+	cam_basis.columns[2] = Vector4(p_basis_cols[8], p_basis_cols[9], p_basis_cols[10], p_basis_cols[11]);
+	// Column 3 = slice normal
+	cam_basis.columns[3] = p_plane_normal;
+
+	rs->material_set_param(_material_rid, "camera_basis_4d", cam_basis);
+
+	// Update per-instance 4D transforms
 	for (VisualInstance4D *inst : _instances) {
-		if (_dirty_set.has(inst)) {
-			_slice_instance_cpu(inst, p_plane_normal, p_plane_d, p_basis_cols, p_camera_origin);
-		}
+		inst->update_shader_transforms();
 	}
-	_dirty_set.clear();
 }

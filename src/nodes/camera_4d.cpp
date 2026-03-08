@@ -88,10 +88,7 @@ void Camera4D::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_TRANSFORM_4D_CHANGED: {
-			// Mark all instances dirty since the camera moved
-			if (Slicer4D::get_singleton()) {
-				Slicer4D::get_singleton()->mark_all_dirty();
-			}
+			// GPU slicer handles camera changes via uniform updates each frame.
 		} break;
 	}
 }
@@ -160,7 +157,7 @@ void Camera4D::_perform_slice() {
 	}
 
 	Vector4 camera_origin(origin->x, origin->y, origin->z, origin->w);
-	Slicer4D::get_singleton()->slice_all(plane_normal, plane_d, basis_cols, camera_origin);
+	Slicer4D::get_singleton()->update_frame(plane_normal, plane_d, basis_cols, camera_origin);
 
 	// Position the internal Camera3D at the camera's projected 3D location.
 	// Geometry is now in world 3D space, so the camera must be at its corresponding 3D position.
@@ -212,6 +209,6 @@ void Camera4D::set_keep_aspect(KeepAspect p_keep) { _keep_aspect = p_keep; }
 void Camera4D::set_cull_mask(uint32_t p_mask) { _cull_mask = p_mask; if (_internal_camera) _internal_camera->set_cull_mask(p_mask); }
 void Camera4D::set_h_offset(real_t p_offset) { _h_offset = p_offset; if (_internal_camera) _internal_camera->set_h_offset(p_offset); }
 void Camera4D::set_v_offset(real_t p_offset) { _v_offset = p_offset; if (_internal_camera) _internal_camera->set_v_offset(p_offset); }
-void Camera4D::set_slice_offset(real_t p_offset) { _slice_offset = p_offset; if (Slicer4D::get_singleton()) Slicer4D::get_singleton()->mark_all_dirty(); }
+void Camera4D::set_slice_offset(real_t p_offset) { _slice_offset = p_offset; }
 void Camera4D::set_environment(const Ref<Environment> &p_env) { _environment = p_env; if (_internal_camera) _internal_camera->set_environment(p_env); }
 void Camera4D::set_attributes(const Ref<CameraAttributes> &p_attrs) { _attributes = p_attrs; if (_internal_camera) _internal_camera->set_attributes(p_attrs); }

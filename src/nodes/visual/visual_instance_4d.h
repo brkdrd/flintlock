@@ -10,9 +10,9 @@ using namespace godot;
 
 // VisualInstance4D - base for all renderable 4D objects.
 // Owns RenderingServer RIDs for the 3D instance and mesh.
-// On enter tree: creates RIDs, registers with Slicer4D.
+// On enter tree: creates RIDs, registers with Slicer4D, uploads GPU mesh.
 // On exit tree: unregisters from Slicer4D, frees RIDs.
-// On transform change: notifies Slicer4D to re-slice.
+// GPU mesh is uploaded once; per-frame slicing happens in the vertex shader.
 class VisualInstance4D : public Node4D {
 	GDCLASS(VisualInstance4D, Node4D);
 
@@ -22,28 +22,29 @@ protected:
 
 	uint32_t _layers = 1;
 	real_t _sorting_offset = 0.0f;
+	bool _gpu_mesh_uploaded = false;
 
 	static void _bind_methods();
 	void _notification(int p_what);
 
 public:
-	// Called by Slicer4D to get the 4D mesh data
+	// Called to get the 4D mesh data for GPU upload
 	virtual Ref<Mesh4D> get_mesh_4d() const { return Ref<Mesh4D>(); }
 
-	// Returns the StandardMaterial3D to apply to the sliced 3D surface (if any)
+	// Returns the Material4D (if any) for applying per-instance material params
 	virtual Ref<Material> get_active_material_3d() const { return Ref<Material>(); }
 
-	// Marks slicer dirty when transform changes (virtual override from Node4D)
+	// No-op for GPU slicer — transforms are handled via shader uniforms
 	void _on_transform_4d_changed() override;
 
-	// Called by Slicer4D to update the rendered 3D geometry
-	void update_rendering_mesh(
-		const PackedFloat32Array &p_vertices,
-		const PackedFloat32Array &p_normals,
-		const PackedFloat32Array &p_uvs,
-		const PackedInt32Array &p_indices);
+	// Packs Mesh4D tetrahedra into GPU vertex format and uploads to _rs_mesh
+	void upload_gpu_mesh();
 
-	void clear_rendering_mesh();
+	// Sets per-instance 4D model matrix on the RenderingServer instance
+	void update_shader_transforms();
+
+	// Apply material properties as per-instance shader parameters
+	void apply_material_params();
 
 	RID get_instance_rid() const { return _rs_instance; }
 	RID get_mesh_rid() const { return _rs_mesh; }
