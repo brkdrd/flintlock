@@ -140,9 +140,12 @@ uniform vec4 slice_normal;
 uniform float slice_d;
 uniform sampler2D lut_texture : filter_nearest, repeat_disable;
 
-// Per-instance uniforms
-instance uniform mat4 model_4d_basis;
-instance uniform vec4 model_4d_origin;
+// Per-instance uniforms (mat4 not supported as instance uniform, split into columns)
+instance uniform vec4 model_4d_col0 = vec4(1.0, 0.0, 0.0, 0.0);
+instance uniform vec4 model_4d_col1 = vec4(0.0, 1.0, 0.0, 0.0);
+instance uniform vec4 model_4d_col2 = vec4(0.0, 0.0, 1.0, 0.0);
+instance uniform vec4 model_4d_col3 = vec4(0.0, 0.0, 0.0, 1.0);
+instance uniform vec4 model_4d_origin = vec4(0.0);
 instance uniform vec4 albedo_color : source_color = vec4(1.0);
 instance uniform float roughness_value = 1.0;
 instance uniform float metallic_value = 0.0;
@@ -156,6 +159,9 @@ void vertex() {
 	vec4 vc = vec4(CUSTOM1.y, CUSTOM1.z, CUSTOM1.w, CUSTOM2.x);
 	vec4 vd = vec4(CUSTOM2.y, CUSTOM2.z, CUSTOM2.w, CUSTOM3.x);
 	int vertex_id = int(CUSTOM3.y + 0.5);
+
+	// Reconstruct 4x4 model basis from columns
+	mat4 model_4d_basis = mat4(model_4d_col0, model_4d_col1, model_4d_col2, model_4d_col3);
 
 	// Apply 4D model transform
 	vec4 wa = model_4d_basis * va + model_4d_origin;
@@ -247,8 +253,8 @@ void Slicer4D::_initialize() {
 	_material_rid = rs->material_create();
 	rs->material_set_shader(_material_rid, _shader_rid);
 
-	// Set LUT texture on the shared material
-	rs->material_set_param(_material_rid, "lut_texture", _lut_texture);
+	// Set LUT texture on the shared material (pass RID, not Object)
+	rs->material_set_param(_material_rid, "lut_texture", _lut_texture->get_rid());
 
 	// Set defaults for global uniforms
 	Projection identity;

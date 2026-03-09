@@ -254,17 +254,17 @@ void VisualInstance4D::update_shader_transforms() {
 	Ref<Vector4D> origin = gt->get_origin();
 	if (basis.is_null() || origin.is_null()) return;
 
-	// Pack 4x4 basis as a Projection (mat4, column-major)
-	Projection model_basis;
-	for (int col = 0; col < 4; col++) {
-		model_basis.columns[col] = Vector4(
-			basis->data[col][0], basis->data[col][1],
-			basis->data[col][2], basis->data[col][3]);
-	}
-
+	// Pack 4x4 basis as 4 vec4 columns (instance uniform doesn't support mat4)
+	Vector4 col0(basis->data[0][0], basis->data[0][1], basis->data[0][2], basis->data[0][3]);
+	Vector4 col1(basis->data[1][0], basis->data[1][1], basis->data[1][2], basis->data[1][3]);
+	Vector4 col2(basis->data[2][0], basis->data[2][1], basis->data[2][2], basis->data[2][3]);
+	Vector4 col3(basis->data[3][0], basis->data[3][1], basis->data[3][2], basis->data[3][3]);
 	Vector4 model_origin(origin->x, origin->y, origin->z, origin->w);
 
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_basis", model_basis);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col0", col0);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col1", col1);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col2", col2);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col3", col3);
 	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_origin", model_origin);
 }
 
