@@ -159,15 +159,10 @@ void Camera4D::_perform_slice() {
 	Vector4 camera_origin(origin->x, origin->y, origin->z, origin->w);
 	Slicer4D::get_singleton()->update_frame(plane_normal, plane_d, basis_cols, camera_origin);
 
-	// Position the internal Camera3D at the camera's projected 3D location.
-	// Geometry is now in world 3D space, so the camera must be at its corresponding 3D position.
+	// Camera3D stays at origin — geometry is projected relative to camera origin
+	// in the vertex shader, so the 3D camera needs no offset.
 	if (_internal_camera) {
-		Vector4 col0(basis_cols[0], basis_cols[1], basis_cols[2], basis_cols[3]);
-		Vector4 col1(basis_cols[4], basis_cols[5], basis_cols[6], basis_cols[7]);
-		Vector4 col2(basis_cols[8], basis_cols[9], basis_cols[10], basis_cols[11]);
-		Transform3D cam_xform;
-		cam_xform.origin = Vector3(col0.dot(camera_origin), col1.dot(camera_origin), col2.dot(camera_origin));
-		_internal_camera->set_global_transform(cam_xform);
+		_internal_camera->set_global_transform(Transform3D());
 	}
 }
 
