@@ -183,25 +183,22 @@ void vertex() {
 	int ep_a = int(lut_val.r * 255.0 + 0.5);
 	int ep_b = int(lut_val.g * 255.0 + 0.5);
 
-	// Degenerate check — collapse to produce zero-area triangle
-	if (ep_a > 3 || ep_b > 3) {
-		VERTEX = vec3(0.0, 0.0, 0.0);
-		POSITION = vec4(0.0, 0.0, 0.0, 1.0);
-		return;
-	}
-
 	// Select the two 4D endpoints and their distances
 	vec4 endpoints[4] = vec4[4](wa, wb, wc, wd);
 	float dists[4] = float[4](da, db, dc, dd);
 
-	vec4 p0 = endpoints[ep_a];
-	vec4 p1 = endpoints[ep_b];
-	float d0 = dists[ep_a];
-	float d1 = dists[ep_b];
+	// Degenerate check — collapse to produce zero-area triangle
+	bool degenerate = (ep_a > 3 || ep_b > 3);
+
+	vec4 p0 = endpoints[degenerate ? 0 : ep_a];
+	vec4 p1 = endpoints[degenerate ? 0 : ep_b];
+	float d0 = dists[degenerate ? 0 : ep_a];
+	float d1 = dists[degenerate ? 0 : ep_b];
 
 	// Interpolate to find hyperplane crossing (where distance = 0)
-	float t = d0 / (d0 - d1);
-	vec4 intersection_4d = mix(p0, p1, t);
+	float denom = d0 - d1;
+	float t = (abs(denom) > 1e-10) ? d0 / denom : 0.0;
+	vec4 intersection_4d = degenerate ? vec4(0.0) : mix(p0, p1, t);
 
 	// Project 4D intersection to 3D using camera basis columns 0,1,2
 	vec3 pos_3d;
