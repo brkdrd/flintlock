@@ -18,6 +18,7 @@ public:
 	void set_material_override(const Ref<Material4D> &p_material);
 
 	Ref<Material> get_active_material_3d() const override;
+	void apply_material_params() override;
 
 	real_t get_transparency() const { return _transparency; }
 	void set_transparency(real_t p_transparency);

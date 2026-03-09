@@ -44,7 +44,7 @@ public:
 	void update_shader_transforms();
 
 	// Apply material properties as per-instance shader parameters
-	void apply_material_params();
+	virtual void apply_material_params();
 
 	RID get_instance_rid() const { return _rs_instance; }
 	RID get_mesh_rid() const { return _rs_mesh; }
