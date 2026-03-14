@@ -140,15 +140,15 @@ uniform vec4 slice_normal;
 uniform float slice_d;
 uniform sampler2D lut_texture : filter_nearest, repeat_disable;
 
-// Per-instance uniforms (mat4 not supported as instance uniform, split into columns)
-instance uniform vec4 model_4d_col0 = vec4(1.0, 0.0, 0.0, 0.0);
-instance uniform vec4 model_4d_col1 = vec4(0.0, 1.0, 0.0, 0.0);
-instance uniform vec4 model_4d_col2 = vec4(0.0, 0.0, 1.0, 0.0);
-instance uniform vec4 model_4d_col3 = vec4(0.0, 0.0, 0.0, 1.0);
-instance uniform vec4 model_4d_origin = vec4(0.0);
-instance uniform vec4 albedo_color : source_color = vec4(1.0);
-instance uniform float roughness_value = 1.0;
-instance uniform float metallic_value = 0.0;
+// Per-instance uniforms (set on each instance's own material)
+uniform vec4 model_4d_col0 = vec4(1.0, 0.0, 0.0, 0.0);
+uniform vec4 model_4d_col1 = vec4(0.0, 1.0, 0.0, 0.0);
+uniform vec4 model_4d_col2 = vec4(0.0, 0.0, 1.0, 0.0);
+uniform vec4 model_4d_col3 = vec4(0.0, 0.0, 0.0, 1.0);
+uniform vec4 model_4d_origin = vec4(0.0);
+uniform vec4 albedo_color : source_color = vec4(1.0);
+uniform float roughness_value = 1.0;
+uniform float metallic_value = 0.0;
 
 varying vec3 local_pos;
 
@@ -268,13 +268,34 @@ void Slicer4D::ensure_initialized() {
 	_initialize();
 }
 
-RID Slicer4D::get_material_rid() {
+RID Slicer4D::get_shader_rid() {
 	ensure_initialized();
-	return _material_rid;
+	return _shader_rid;
+}
+
+RID Slicer4D::get_lut_rid() {
+	ensure_initialized();
+	return _lut_texture->get_rid();
+}
+
+RID Slicer4D::create_instance_material() {
+	ensure_initialized();
+	RenderingServer *rs = RenderingServer::get_singleton();
+	RID mat = rs->material_create();
+	rs->material_set_shader(mat, _shader_rid);
+	// Set LUT texture and default global uniforms
+	rs->material_set_param(mat, "lut_texture", _lut_texture->get_rid());
+	Projection identity;
+	rs->material_set_param(mat, "camera_basis_4d", identity);
+	rs->material_set_param(mat, "camera_origin_4d", Vector4(0, 0, 0, 0));
+	rs->material_set_param(mat, "slice_normal", Vector4(0, 0, 0, 1));
+	rs->material_set_param(mat, "slice_d", 0.0f);
+	return mat;
 }
 
 // ============================================================
-// Per-frame update — sets global shader uniforms only
+// Per-frame update — sets global + per-instance uniforms on
+// each instance's own material.
 // ============================================================
 void Slicer4D::update_frame(const Vector4 &p_plane_normal, float p_plane_d,
 	const PackedFloat32Array &p_basis_cols,
@@ -284,28 +305,25 @@ void Slicer4D::update_frame(const Vector4 &p_plane_normal, float p_plane_d,
 
 	RenderingServer *rs = RenderingServer::get_singleton();
 
-	// Update global uniforms on the shared material
-	rs->material_set_param(_material_rid, "slice_normal", p_plane_normal);
-	rs->material_set_param(_material_rid, "slice_d", p_plane_d);
-	rs->material_set_param(_material_rid, "camera_origin_4d", p_camera_origin);
-
-	// Pack camera basis as a Projection (mat4): columns 0-3 of the 4D camera basis
-	// p_basis_cols has 12 floats (3 columns x 4 components).
-	// Column 3 = slice_normal (already set separately).
+	// Pack camera basis as a Projection (mat4)
 	Projection cam_basis;
-	// Column 0
 	cam_basis.columns[0] = Vector4(p_basis_cols[0], p_basis_cols[1], p_basis_cols[2], p_basis_cols[3]);
-	// Column 1
 	cam_basis.columns[1] = Vector4(p_basis_cols[4], p_basis_cols[5], p_basis_cols[6], p_basis_cols[7]);
-	// Column 2
 	cam_basis.columns[2] = Vector4(p_basis_cols[8], p_basis_cols[9], p_basis_cols[10], p_basis_cols[11]);
-	// Column 3 = slice normal
 	cam_basis.columns[3] = p_plane_normal;
 
-	rs->material_set_param(_material_rid, "camera_basis_4d", cam_basis);
-
-	// Update per-instance 4D transforms
+	// Update each instance's material with global uniforms + per-instance transforms
 	for (VisualInstance4D *inst : _instances) {
+		RID mat = inst->get_material_rid();
+		if (!mat.is_valid()) continue;
+
+		// Global uniforms
+		rs->material_set_param(mat, "slice_normal", p_plane_normal);
+		rs->material_set_param(mat, "slice_d", p_plane_d);
+		rs->material_set_param(mat, "camera_origin_4d", p_camera_origin);
+		rs->material_set_param(mat, "camera_basis_4d", cam_basis);
+
+		// Per-instance model transform
 		inst->update_shader_transforms();
 	}
 }

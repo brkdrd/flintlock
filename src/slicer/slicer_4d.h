@@ -60,7 +60,9 @@ public:
 		const PackedFloat32Array &p_basis_cols,
 		const Vector4 &p_camera_origin);
 
-	RID get_material_rid();
+	RID get_shader_rid();
+	RID get_lut_rid();
+	RID create_instance_material(); // Creates a new material from the shared shader
 	bool is_initialized() const { return _initialized; }
 	void ensure_initialized();
 

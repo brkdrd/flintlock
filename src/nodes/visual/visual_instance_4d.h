@@ -17,8 +17,9 @@ class VisualInstance4D : public Node4D {
 	GDCLASS(VisualInstance4D, Node4D);
 
 protected:
-	RID _rs_instance; // RenderingServer instance RID
-	RID _rs_mesh;     // RenderingServer mesh RID
+	RID _rs_instance;  // RenderingServer instance RID
+	RID _rs_mesh;      // RenderingServer mesh RID
+	RID _rs_material;  // Per-instance material RID (owns its own uniforms)
 
 	uint32_t _layers = 1;
 	real_t _sorting_offset = 0.0f;
@@ -48,6 +49,7 @@ public:
 
 	RID get_instance_rid() const { return _rs_instance; }
 	RID get_mesh_rid() const { return _rs_mesh; }
+	RID get_material_rid() const { return _rs_material; }
 
 	uint32_t get_layers() const { return _layers; }
 	void set_layers(uint32_t p_layers);

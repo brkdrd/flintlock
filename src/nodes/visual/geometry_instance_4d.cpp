@@ -28,7 +28,7 @@ Ref<Material> GeometryInstance4D::get_active_material_3d() const {
 }
 
 void GeometryInstance4D::apply_material_params() {
-	if (!_rs_instance.is_valid()) return;
+	if (!_rs_material.is_valid()) return;
 
 	RenderingServer *rs = RenderingServer::get_singleton();
 
@@ -42,7 +42,7 @@ void GeometryInstance4D::apply_material_params() {
 		metallic = _material_override->get_metallic();
 	}
 
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "albedo_color", albedo);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "roughness_value", roughness);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "metallic_value", metallic);
+	rs->material_set_param(_rs_material, "albedo_color", albedo);
+	rs->material_set_param(_rs_material, "roughness_value", roughness);
+	rs->material_set_param(_rs_material, "metallic_value", metallic);
 }

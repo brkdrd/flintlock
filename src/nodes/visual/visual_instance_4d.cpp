@@ -38,8 +38,9 @@ void VisualInstance4D::_notification(int p_what) {
 
 			rs->instance_set_layer_mask(_rs_instance, _layers);
 
-			// Register with Slicer4D
+			// Create per-instance material from the slicer shader
 			if (Slicer4D::get_singleton()) {
+				_rs_material = Slicer4D::get_singleton()->create_instance_material();
 				Slicer4D::get_singleton()->register_instance(this);
 			}
 
@@ -63,6 +64,10 @@ void VisualInstance4D::_notification(int p_what) {
 			if (_rs_mesh.is_valid()) {
 				rs->free_rid(_rs_mesh);
 				_rs_mesh = RID();
+			}
+			if (_rs_material.is_valid()) {
+				rs->free_rid(_rs_material);
+				_rs_material = RID();
 			}
 			_gpu_mesh_uploaded = false;
 		} break;
@@ -107,9 +112,7 @@ void VisualInstance4D::upload_gpu_mesh() {
 		return;
 	}
 
-	Slicer4D *slicer = Slicer4D::get_singleton();
-	if (!slicer) return;
-	slicer->ensure_initialized();
+	if (!_rs_material.is_valid()) return;
 
 	// Accumulate all tetrahedra from all surfaces
 	PackedVector3Array gpu_verts;
@@ -228,8 +231,8 @@ void VisualInstance4D::upload_gpu_mesh() {
 	rs->mesh_add_surface_from_arrays(_rs_mesh, RenderingServer::PRIMITIVE_TRIANGLES, arrays,
 		Array(), Dictionary(), (BitField<RenderingServer::ArrayFormat>)fmt);
 
-	// Apply the shared slicer material
-	rs->mesh_surface_set_material(_rs_mesh, 0, slicer->get_material_rid());
+	// Apply this instance's own material
+	rs->mesh_surface_set_material(_rs_mesh, 0, _rs_material);
 
 	// Set a large AABB so frustum culling doesn't clip our shader-moved vertices
 	rs->mesh_set_custom_aabb(_rs_mesh, AABB(Vector3(-1000, -1000, -1000), Vector3(2000, 2000, 2000)));
@@ -244,7 +247,7 @@ void VisualInstance4D::upload_gpu_mesh() {
 // update_shader_transforms — sets per-instance 4D model matrix
 // ============================================================
 void VisualInstance4D::update_shader_transforms() {
-	if (!_rs_instance.is_valid() || !_gpu_mesh_uploaded) return;
+	if (!_rs_material.is_valid() || !_gpu_mesh_uploaded) return;
 
 	RenderingServer *rs = RenderingServer::get_singleton();
 
@@ -254,25 +257,25 @@ void VisualInstance4D::update_shader_transforms() {
 	Ref<Vector4D> origin = gt->get_origin();
 	if (basis.is_null() || origin.is_null()) return;
 
-	// Pack 4x4 basis as 4 vec4 columns (instance uniform doesn't support mat4)
+	// Pack 4x4 basis as 4 vec4 columns
 	Vector4 col0(basis->data[0][0], basis->data[0][1], basis->data[0][2], basis->data[0][3]);
 	Vector4 col1(basis->data[1][0], basis->data[1][1], basis->data[1][2], basis->data[1][3]);
 	Vector4 col2(basis->data[2][0], basis->data[2][1], basis->data[2][2], basis->data[2][3]);
 	Vector4 col3(basis->data[3][0], basis->data[3][1], basis->data[3][2], basis->data[3][3]);
 	Vector4 model_origin(origin->x, origin->y, origin->z, origin->w);
 
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col0", col0);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col1", col1);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col2", col2);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col3", col3);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_origin", model_origin);
+	rs->material_set_param(_rs_material, "model_4d_col0", col0);
+	rs->material_set_param(_rs_material, "model_4d_col1", col1);
+	rs->material_set_param(_rs_material, "model_4d_col2", col2);
+	rs->material_set_param(_rs_material, "model_4d_col3", col3);
+	rs->material_set_param(_rs_material, "model_4d_origin", model_origin);
 }
 
 // ============================================================
 // apply_material_params — sets per-instance material properties
 // ============================================================
 void VisualInstance4D::apply_material_params() {
-	if (!_rs_instance.is_valid()) return;
+	if (!_rs_material.is_valid()) return;
 
 	RenderingServer *rs = RenderingServer::get_singleton();
 
@@ -281,16 +284,9 @@ void VisualInstance4D::apply_material_params() {
 	float roughness = 1.0f;
 	float metallic = 0.0f;
 
-	// Try to get Material4D from the subclass
-	Ref<Material> mat3d = get_active_material_3d();
-	// We need the raw Material4D, not the StandardMaterial3D it generates.
-	// For now, we'll check GeometryInstance4D's override directly via dynamic cast.
-	// Subclasses that have Material4D should override apply_material_params or
-	// we extract from the hierarchy.
-
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "albedo_color", albedo);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "roughness_value", roughness);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "metallic_value", metallic);
+	rs->material_set_param(_rs_material, "albedo_color", albedo);
+	rs->material_set_param(_rs_material, "roughness_value", roughness);
+	rs->material_set_param(_rs_material, "metallic_value", metallic);
 }
 
 void VisualInstance4D::set_layers(uint32_t p_layers) {
