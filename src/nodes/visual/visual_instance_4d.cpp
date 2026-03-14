@@ -38,14 +38,18 @@ void VisualInstance4D::_notification(int p_what) {
 
 			rs->instance_set_layer_mask(_rs_instance, _layers);
 
-			// Create per-instance material from the slicer shader
+			// Register with slicer (shared material is applied in upload_gpu_mesh)
 			if (Slicer4D::get_singleton()) {
-				_rs_material = Slicer4D::get_singleton()->create_instance_material();
 				Slicer4D::get_singleton()->register_instance(this);
 			}
 
-			// Upload mesh data to GPU and apply material
+			// Upload mesh data to GPU
 			upload_gpu_mesh();
+
+			// Eagerly set per-instance shader params to prevent phantom
+			// (instance_valid=1.0 enables rendering; without this, shader
+			// defaults produce degenerate zero-area triangles)
+			update_shader_transforms();
 			apply_material_params();
 		} break;
 
@@ -64,10 +68,6 @@ void VisualInstance4D::_notification(int p_what) {
 			if (_rs_mesh.is_valid()) {
 				rs->free_rid(_rs_mesh);
 				_rs_mesh = RID();
-			}
-			if (_rs_material.is_valid()) {
-				rs->free_rid(_rs_material);
-				_rs_material = RID();
 			}
 			_gpu_mesh_uploaded = false;
 		} break;
@@ -112,7 +112,8 @@ void VisualInstance4D::upload_gpu_mesh() {
 		return;
 	}
 
-	if (!_rs_material.is_valid()) return;
+	if (!Slicer4D::get_singleton()) return;
+	RID shared_material = Slicer4D::get_singleton()->get_material_rid();
 
 	// Accumulate all tetrahedra from all surfaces
 	PackedVector3Array gpu_verts;
@@ -231,8 +232,8 @@ void VisualInstance4D::upload_gpu_mesh() {
 	rs->mesh_add_surface_from_arrays(_rs_mesh, RenderingServer::PRIMITIVE_TRIANGLES, arrays,
 		Array(), Dictionary(), (BitField<RenderingServer::ArrayFormat>)fmt);
 
-	// Apply this instance's own material
-	rs->mesh_surface_set_material(_rs_mesh, 0, _rs_material);
+	// Apply the shared slicer material
+	rs->mesh_surface_set_material(_rs_mesh, 0, shared_material);
 
 	// Set a large AABB so frustum culling doesn't clip our shader-moved vertices
 	rs->mesh_set_custom_aabb(_rs_mesh, AABB(Vector3(-1000, -1000, -1000), Vector3(2000, 2000, 2000)));
@@ -247,7 +248,7 @@ void VisualInstance4D::upload_gpu_mesh() {
 // update_shader_transforms — sets per-instance 4D model matrix
 // ============================================================
 void VisualInstance4D::update_shader_transforms() {
-	if (!_rs_material.is_valid() || !_gpu_mesh_uploaded) return;
+	if (!_rs_instance.is_valid() || !_gpu_mesh_uploaded) return;
 
 	RenderingServer *rs = RenderingServer::get_singleton();
 
@@ -264,18 +265,19 @@ void VisualInstance4D::update_shader_transforms() {
 	Vector4 col3(basis->data[3][0], basis->data[3][1], basis->data[3][2], basis->data[3][3]);
 	Vector4 model_origin(origin->x, origin->y, origin->z, origin->w);
 
-	rs->material_set_param(_rs_material, "model_4d_col0", col0);
-	rs->material_set_param(_rs_material, "model_4d_col1", col1);
-	rs->material_set_param(_rs_material, "model_4d_col2", col2);
-	rs->material_set_param(_rs_material, "model_4d_col3", col3);
-	rs->material_set_param(_rs_material, "model_4d_origin", model_origin);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col0", col0);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col1", col1);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col2", col2);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col3", col3);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_origin", model_origin);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "instance_valid", 1.0f);
 }
 
 // ============================================================
 // apply_material_params — sets per-instance material properties
 // ============================================================
 void VisualInstance4D::apply_material_params() {
-	if (!_rs_material.is_valid()) return;
+	if (!_rs_instance.is_valid()) return;
 
 	RenderingServer *rs = RenderingServer::get_singleton();
 
@@ -284,9 +286,9 @@ void VisualInstance4D::apply_material_params() {
 	float roughness = 1.0f;
 	float metallic = 0.0f;
 
-	rs->material_set_param(_rs_material, "albedo_color", albedo);
-	rs->material_set_param(_rs_material, "roughness_value", roughness);
-	rs->material_set_param(_rs_material, "metallic_value", metallic);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "albedo_color", albedo);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "roughness_value", roughness);
+	rs->instance_geometry_set_shader_parameter(_rs_instance, "metallic_value", metallic);
 }
 
 void VisualInstance4D::set_layers(uint32_t p_layers) {

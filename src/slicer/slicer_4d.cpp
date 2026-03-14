@@ -140,15 +140,16 @@ uniform vec4 slice_normal;
 uniform float slice_d;
 uniform sampler2D lut_texture : filter_nearest, repeat_disable;
 
-// Per-instance uniforms (set on each instance's own material)
-uniform vec4 model_4d_col0 = vec4(1.0, 0.0, 0.0, 0.0);
-uniform vec4 model_4d_col1 = vec4(0.0, 1.0, 0.0, 0.0);
-uniform vec4 model_4d_col2 = vec4(0.0, 0.0, 1.0, 0.0);
-uniform vec4 model_4d_col3 = vec4(0.0, 0.0, 0.0, 1.0);
-uniform vec4 model_4d_origin = vec4(0.0);
-uniform vec4 albedo_color : source_color = vec4(1.0);
-uniform float roughness_value = 1.0;
-uniform float metallic_value = 0.0;
+// Per-instance uniforms (set via instance_geometry_set_shader_parameter)
+instance uniform vec4 model_4d_col0 = vec4(1.0, 0.0, 0.0, 0.0);
+instance uniform vec4 model_4d_col1 = vec4(0.0, 1.0, 0.0, 0.0);
+instance uniform vec4 model_4d_col2 = vec4(0.0, 0.0, 1.0, 0.0);
+instance uniform vec4 model_4d_col3 = vec4(0.0, 0.0, 0.0, 1.0);
+instance uniform vec4 model_4d_origin = vec4(0.0);
+instance uniform vec4 albedo_color : source_color = vec4(1.0);
+instance uniform float roughness_value = 1.0;
+instance uniform float metallic_value = 0.0;
+instance uniform float instance_valid = 0.0;
 
 varying vec3 local_pos;
 
@@ -188,7 +189,8 @@ void vertex() {
 	float dists[4] = float[4](da, db, dc, dd);
 
 	// Degenerate check — collapse to produce zero-area triangle behind camera
-	bool degenerate = (ep_a > 3 || ep_b > 3);
+	// instance_valid defaults to 0.0; set to 1.0 by update_shader_transforms()
+	bool degenerate = (ep_a > 3 || ep_b > 3) || (instance_valid < 0.5);
 
 	vec4 p0 = endpoints[degenerate ? 0 : ep_a];
 	vec4 p1 = endpoints[degenerate ? 0 : ep_b];
@@ -272,24 +274,14 @@ RID Slicer4D::get_shader_rid() {
 	return _shader_rid;
 }
 
+RID Slicer4D::get_material_rid() {
+	ensure_initialized();
+	return _material_rid;
+}
+
 RID Slicer4D::get_lut_rid() {
 	ensure_initialized();
 	return _lut_texture->get_rid();
-}
-
-RID Slicer4D::create_instance_material() {
-	ensure_initialized();
-	RenderingServer *rs = RenderingServer::get_singleton();
-	RID mat = rs->material_create();
-	rs->material_set_shader(mat, _shader_rid);
-	// Set LUT texture and default global uniforms
-	rs->material_set_param(mat, "lut_texture", _lut_texture->get_rid());
-	Projection identity;
-	rs->material_set_param(mat, "camera_basis_4d", identity);
-	rs->material_set_param(mat, "camera_origin_4d", Vector4(0, 0, 0, 0));
-	rs->material_set_param(mat, "slice_normal", Vector4(0, 0, 0, 1));
-	rs->material_set_param(mat, "slice_d", 0.0f);
-	return mat;
 }
 
 // ============================================================
@@ -311,18 +303,14 @@ void Slicer4D::update_frame(const Vector4 &p_plane_normal, float p_plane_d,
 	cam_basis.columns[2] = Vector4(p_basis_cols[8], p_basis_cols[9], p_basis_cols[10], p_basis_cols[11]);
 	cam_basis.columns[3] = p_plane_normal;
 
-	// Update each instance's material with global uniforms + per-instance transforms
+	// Set global uniforms on the shared material
+	rs->material_set_param(_material_rid, "slice_normal", p_plane_normal);
+	rs->material_set_param(_material_rid, "slice_d", p_plane_d);
+	rs->material_set_param(_material_rid, "camera_origin_4d", p_camera_origin);
+	rs->material_set_param(_material_rid, "camera_basis_4d", cam_basis);
+
+	// Update per-instance transforms via instance shader parameters
 	for (VisualInstance4D *inst : _instances) {
-		RID mat = inst->get_material_rid();
-		if (!mat.is_valid()) continue;
-
-		// Global uniforms
-		rs->material_set_param(mat, "slice_normal", p_plane_normal);
-		rs->material_set_param(mat, "slice_d", p_plane_d);
-		rs->material_set_param(mat, "camera_origin_4d", p_camera_origin);
-		rs->material_set_param(mat, "camera_basis_4d", cam_basis);
-
-		// Per-instance model transform
 		inst->update_shader_transforms();
 	}
 }
