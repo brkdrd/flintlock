@@ -198,20 +198,19 @@ void vertex() {
 	// Interpolate to find hyperplane crossing (where distance = 0)
 	float denom = d0 - d1;
 	float t = (abs(denom) > 1e-10) ? d0 / denom : 0.0;
-	vec4 intersection_4d = degenerate ? camera_origin_4d : mix(p0, p1, t);
+	vec4 intersection_4d = degenerate ? vec4(0.0) : mix(p0, p1, t);
 
-	// Project 4D intersection to 3D relative to camera origin
-	vec4 relative_4d = intersection_4d - camera_origin_4d;
+	// Project 4D intersection to 3D using camera basis columns 0,1,2
 	vec3 pos_3d;
-	pos_3d.x = dot(camera_basis_4d[0], relative_4d);
-	pos_3d.y = dot(camera_basis_4d[1], relative_4d);
-	pos_3d.z = dot(camera_basis_4d[2], relative_4d);
+	pos_3d.x = dot(camera_basis_4d[0], intersection_4d);
+	pos_3d.y = dot(camera_basis_4d[1], intersection_4d);
+	pos_3d.z = dot(camera_basis_4d[2], intersection_4d);
 
 	local_pos = pos_3d;
-
-	// With skip_vertex_transform, VERTEX must be in view space.
-	// Camera3D is at origin with identity rotation, so view space = world space.
 	VERTEX = pos_3d;
+
+	// Transform through Godot's view/projection pipeline
+	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(pos_3d, 1.0);
 
 	// Placeholder normal (computed in fragment via derivatives)
 	NORMAL = vec3(0.0, 1.0, 0.0);
@@ -223,12 +222,12 @@ void fragment() {
 	vec3 dy = dFdy(local_pos);
 	vec3 n = normalize(cross(dx, dy));
 
-	// Ensure normal faces toward the camera (+Z in view space)
-	if (n.z < 0.0) {
+	// Ensure normal faces the camera
+	if (dot(n, VIEW_MATRIX[2].xyz) > 0.0) {
 		n = -n;
 	}
 
-	NORMAL = n;
+	NORMAL = (VIEW_MATRIX * vec4(n, 0.0)).xyz;
 	ALBEDO = albedo_color.rgb;
 	ROUGHNESS = roughness_value;
 	METALLIC = metallic_value;
