@@ -151,7 +151,8 @@ instance uniform float roughness_value = 1.0;
 instance uniform float metallic_value = 0.0;
 instance uniform float instance_valid = 0.0;
 
-varying vec3 local_pos;
+varying vec3 world_pos;
+varying float v_degenerate;
 
 void vertex() {
 	// Reconstruct 4 tetrahedron vertices from packed attributes
@@ -191,11 +192,17 @@ void vertex() {
 	// Degenerate check — collapse to produce zero-area triangle behind camera
 	// instance_valid defaults to 0.0; set to 1.0 by update_shader_transforms()
 	bool degenerate = (ep_a > 3 || ep_b > 3) || (instance_valid < 0.5);
+	v_degenerate = degenerate ? 1.0 : 0.0;
 
-	vec4 p0 = endpoints[degenerate ? 0 : ep_a];
-	vec4 p1 = endpoints[degenerate ? 0 : ep_b];
-	float d0 = dists[degenerate ? 0 : ep_a];
-	float d1 = dists[degenerate ? 0 : ep_b];
+	// Clamp indices to valid range to prevent GPU undefined behavior
+	// (some GPUs evaluate both ternary branches and may access out-of-bounds)
+	int safe_a = clamp(ep_a, 0, 3);
+	int safe_b = clamp(ep_b, 0, 3);
+
+	vec4 p0 = endpoints[degenerate ? 0 : safe_a];
+	vec4 p1 = endpoints[degenerate ? 0 : safe_b];
+	float d0 = dists[degenerate ? 0 : safe_a];
+	float d1 = dists[degenerate ? 0 : safe_b];
 
 	// Interpolate to find hyperplane crossing (where distance = 0)
 	float denom = d0 - d1;
@@ -208,28 +215,36 @@ void vertex() {
 	pos_3d.y = dot(camera_basis_4d[1], intersection_4d);
 	pos_3d.z = dot(camera_basis_4d[2], intersection_4d);
 
-	local_pos = pos_3d;
-	VERTEX = pos_3d;
+	// Store world-space position for fragment normal computation
+	world_pos = pos_3d;
 
-	// Transform through Godot's view/projection pipeline
-	POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(pos_3d, 1.0);
+	// VERTEX must be in view space for Godot's built-in lighting pipeline
+	// (skip_vertex_transform skips MODEL_MATRIX; we must also apply VIEW_MATRIX)
+	VERTEX = (VIEW_MATRIX * vec4(pos_3d, 1.0)).xyz;
 
-	// Placeholder normal (computed in fragment via derivatives)
-	NORMAL = vec3(0.0, 1.0, 0.0);
+	// Explicit clip-space position (overrides default VERTEX projection)
+	POSITION = PROJECTION_MATRIX * vec4(VERTEX, 1.0);
+
+	// Placeholder normal in view space (overridden in fragment via derivatives)
+	NORMAL = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
 }
 
 void fragment() {
-	// Compute flat normal from screen-space derivatives of position
-	vec3 dx = dFdx(local_pos);
-	vec3 dy = dFdy(local_pos);
+	// Discard degenerate triangles that slipped through zero-area culling
+	if (v_degenerate > 0.5) discard;
+
+	// Compute flat normal from screen-space derivatives of world position
+	vec3 dx = dFdx(world_pos);
+	vec3 dy = dFdy(world_pos);
 	vec3 n = normalize(cross(dx, dy));
 
-	// Ensure normal faces the camera
+	// Ensure normal faces the camera (VIEW_MATRIX[2].xyz = camera Z axis in world space)
 	if (dot(n, VIEW_MATRIX[2].xyz) > 0.0) {
 		n = -n;
 	}
 
-	NORMAL = (VIEW_MATRIX * vec4(n, 0.0)).xyz;
+	// Transform world-space normal to view space for Godot's lighting
+	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 	ALBEDO = albedo_color.rgb;
 	ROUGHNESS = roughness_value;
 	METALLIC = metallic_value;

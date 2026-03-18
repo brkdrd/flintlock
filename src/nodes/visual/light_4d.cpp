@@ -63,7 +63,10 @@ void Light4D::_bind_methods() {
 }
 
 void Light4D::_notification(int p_what) {
-	VisualInstance4D::_notification(p_what);
+	// Skip VisualInstance4D — lights have no mesh data, so creating RS
+	// mesh/instance RIDs and registering with Slicer4D is unnecessary
+	// and can pollute the rendering pipeline with empty instances.
+	Node4D::_notification(p_what);
 
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
@@ -117,24 +120,21 @@ void Light4D::_project_light() {
 	Ref<Transform4D> cam_gt = cam4->get_global_transform_4d();
 	if (cam_gt.is_null()) return;
 	Ref<Basis4D> cam_basis = cam_gt->get_basis();
-	Ref<Vector4D> cam_origin = cam_gt->get_origin();
-	if (cam_basis.is_null() || cam_origin.is_null()) return;
+	if (cam_basis.is_null()) return;
 
-	// Relative position from camera
-	float rx = pos4d->x - cam_origin->x;
-	float ry = pos4d->y - cam_origin->y;
-	float rz = pos4d->z - cam_origin->z;
-	float rw = pos4d->w - cam_origin->w;
-
-	// Project to 3D using camera basis columns 0,1,2
+	// Project to 3D using camera basis columns 0,1,2.
+	// Must use ABSOLUTE projection (not camera-relative) to match the
+	// shader's mesh vertex projection. Camera3D's VIEW_MATRIX handles
+	// the camera-relative subtraction during rendering.
 	Ref<Vector4D> col0 = cam_basis->get_column(0);
 	Ref<Vector4D> col1 = cam_basis->get_column(1);
 	Ref<Vector4D> col2 = cam_basis->get_column(2);
 	if (col0.is_null() || col1.is_null() || col2.is_null()) return;
 
-	float x3 = col0->x * rx + col0->y * ry + col0->z * rz + col0->w * rw;
-	float y3 = col1->x * rx + col1->y * ry + col1->z * rz + col1->w * rw;
-	float z3 = col2->x * rx + col2->y * ry + col2->z * rz + col2->w * rw;
+	float px = pos4d->x, py = pos4d->y, pz = pos4d->z, pw = pos4d->w;
+	float x3 = col0->x * px + col0->y * py + col0->z * pz + col0->w * pw;
+	float y3 = col1->x * px + col1->y * py + col1->z * pz + col1->w * pw;
+	float z3 = col2->x * px + col2->y * py + col2->z * pz + col2->w * pw;
 
 	_internal_light->set_position(Vector3(x3, y3, z3));
 }

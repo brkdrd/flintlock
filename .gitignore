@@ -1,6 +1,7 @@
 # Godot auto generated files
 *.gen.*
 .godot/
+build.sh
 
 # Build outputs
 demo/addons/godot_4d/bin/*.so
