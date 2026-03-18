@@ -46,10 +46,13 @@ void VisualInstance4D::_notification(int p_what) {
 			// Upload mesh data to GPU
 			upload_gpu_mesh();
 
-			// Eagerly set per-instance shader params to prevent phantom
-			// (instance_valid=1.0 enables rendering; without this, shader
-			// defaults produce degenerate zero-area triangles)
-			update_shader_transforms();
+			// Do NOT set instance_valid=1.0 here. The shader default is 0.0,
+			// which collapses all vertices to degenerate zero-area triangles
+			// (discarded in the fragment shader). Slicer4D::update_frame()
+			// sets correct camera uniforms FIRST, then iterates all instances
+			// calling update_shader_transforms() which sets instance_valid=1.0.
+			// Setting it eagerly here would render one+ frames with stale
+			// camera globals, producing a phantom clone at the origin.
 			apply_material_params();
 		} break;
 
