@@ -151,7 +151,7 @@ instance uniform float roughness_value = 1.0;
 instance uniform float metallic_value = 0.0;
 instance uniform float instance_valid = 0.0;
 
-varying vec3 world_pos;
+varying vec3 v_normal_3d;
 varying float v_degenerate;
 
 void vertex() {
@@ -162,14 +162,28 @@ void vertex() {
 	vec4 vd = vec4(CUSTOM2.y, CUSTOM2.z, CUSTOM2.w, CUSTOM3.x);
 	int vertex_id = int(CUSTOM3.y + 0.5);
 
+	// Reconstruct 4 tetrahedron normals from packed attributes
+	// NORMAL(vec3) + TANGENT(vec4) + COLOR(vec4,bias) + UV(vec2) + UV2(vec2) + CUSTOM3.z
+	vec4 na = vec4(NORMAL.x, NORMAL.y, NORMAL.z, TANGENT.x);
+	vec4 nb = vec4(TANGENT.y, TANGENT.z, TANGENT.w, COLOR.x * 2.0 - 1.0);
+	vec4 nc = vec4(COLOR.y * 2.0 - 1.0, COLOR.z * 2.0 - 1.0, COLOR.w * 2.0 - 1.0, UV.x);
+	vec4 nd = vec4(UV.y, UV2.x, UV2.y, CUSTOM3.z);
+
 	// Reconstruct 4x4 model basis from columns
 	mat4 model_4d_basis = mat4(model_4d_col0, model_4d_col1, model_4d_col2, model_4d_col3);
 
-	// Apply 4D model transform
+	// Apply 4D model transform to positions
 	vec4 wa = model_4d_basis * va + model_4d_origin;
 	vec4 wb = model_4d_basis * vb + model_4d_origin;
 	vec4 wc = model_4d_basis * vc + model_4d_origin;
 	vec4 wd = model_4d_basis * vd + model_4d_origin;
+
+	// Transform normals by model basis (correct for orthonormal bases;
+	// for non-uniform scaling, would need inverse-transpose)
+	vec4 wna = model_4d_basis * na;
+	vec4 wnb = model_4d_basis * nb;
+	vec4 wnc = model_4d_basis * nc;
+	vec4 wnd = model_4d_basis * nd;
 
 	// Signed distances to hyperplane
 	float da = dot(slice_normal, wa) - slice_d;
@@ -187,6 +201,7 @@ void vertex() {
 
 	// Select the two 4D endpoints and their distances
 	vec4 endpoints[4] = vec4[4](wa, wb, wc, wd);
+	vec4 endnormals[4] = vec4[4](wna, wnb, wnc, wnd);
 	float dists[4] = float[4](da, db, dc, dd);
 
 	// Degenerate check — collapse to produce zero-area triangle behind camera
@@ -204,10 +219,17 @@ void vertex() {
 	float d0 = dists[degenerate ? 0 : safe_a];
 	float d1 = dists[degenerate ? 0 : safe_b];
 
+	// Normal endpoints for interpolation
+	vec4 n0 = endnormals[degenerate ? 0 : safe_a];
+	vec4 n1 = endnormals[degenerate ? 0 : safe_b];
+
 	// Interpolate to find hyperplane crossing (where distance = 0)
 	float denom = d0 - d1;
 	float t = (abs(denom) > 1e-10) ? d0 / denom : 0.0;
 	vec4 intersection_4d = degenerate ? vec4(0.0) : mix(p0, p1, t);
+
+	// Interpolate normal at the crossing point
+	vec4 interp_normal_4d = degenerate ? vec4(0.0, 1.0, 0.0, 0.0) : mix(n0, n1, t);
 
 	// Project 4D intersection to 3D using camera basis columns 0,1,2
 	vec3 pos_3d;
@@ -215,8 +237,12 @@ void vertex() {
 	pos_3d.y = dot(camera_basis_4d[1], intersection_4d);
 	pos_3d.z = dot(camera_basis_4d[2], intersection_4d);
 
-	// Store world-space position for fragment normal computation
-	world_pos = pos_3d;
+	// Project 4D normal to 3D using camera basis (same projection)
+	vec3 normal_3d;
+	normal_3d.x = dot(camera_basis_4d[0], interp_normal_4d);
+	normal_3d.y = dot(camera_basis_4d[1], interp_normal_4d);
+	normal_3d.z = dot(camera_basis_4d[2], interp_normal_4d);
+	v_normal_3d = normal_3d;
 
 	// VERTEX must be in view space for Godot's built-in lighting pipeline
 	// (skip_vertex_transform skips MODEL_MATRIX; we must also apply VIEW_MATRIX)
@@ -225,24 +251,22 @@ void vertex() {
 	// Explicit clip-space position (overrides default VERTEX projection)
 	POSITION = PROJECTION_MATRIX * vec4(VERTEX, 1.0);
 
-	// Placeholder normal in view space (overridden in fragment via derivatives)
-	NORMAL = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+	// Set NORMAL in vertex shader too (used by shadow pass which skips fragment)
+	vec3 vn = normalize(normal_3d);
+	if (dot(vn, VIEW_MATRIX[2].xyz) < 0.0) vn = -vn;
+	NORMAL = normalize((VIEW_MATRIX * vec4(vn, 0.0)).xyz);
 }
 
 void fragment() {
 	// Discard degenerate triangles that slipped through zero-area culling
 	if (v_degenerate > 0.5) discard;
 
-	// Compute flat normal from screen-space derivatives of world position
-	vec3 dx = dFdx(world_pos);
-	vec3 dy = dFdy(world_pos);
-	vec3 n = normalize(cross(dx, dy));
+	// Use analytical normal interpolated from 4D vertex normals
+	vec3 n = normalize(v_normal_3d);
 
 	// Ensure normal faces the camera.
-	// VIEW_MATRIX[2].xyz = camera's backward direction in world space (+Z).
-	// cross(dFdx, dFdy) in Vulkan produces normals pointing AWAY from the
-	// viewer for front-facing geometry (dFdy Y-axis is flipped vs OpenGL).
-	// Flip when dot < 0 (normal points away from camera backward = away from viewer).
+	// VIEW_MATRIX[2].xyz = camera's backward direction in world space.
+	// Flip when dot < 0 (normal points away from viewer).
 	if (dot(n, VIEW_MATRIX[2].xyz) < 0.0) {
 		n = -n;
 	}

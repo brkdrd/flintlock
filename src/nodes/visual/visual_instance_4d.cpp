@@ -93,15 +93,28 @@ void VisualInstance4D::_on_transform_4d_changed() {
 // upload_gpu_mesh — Pack Mesh4D tetrahedra into GPU vertex format
 //
 // Each tetrahedron (4 vertices in 4D) becomes 6 GPU vertices
-// (2 triangles). All 4 tet vertices are packed into every GPU
-// vertex via CUSTOM0-3 channels.
+// (2 triangles). All 4 tet vertices + normals are packed into
+// every GPU vertex across VERTEX, NORMAL, TANGENT, COLOR,
+// UV, UV2, and CUSTOM0-3.
 //
-// Layout per GPU vertex:
-//   VERTEX (vec3)   = va.xyz
+// Positions:
+//   VERTEX  (vec3)  = va.xyz
 //   CUSTOM0 (vec4)  = (va.w, vb.x, vb.y, vb.z)
 //   CUSTOM1 (vec4)  = (vb.w, vc.x, vc.y, vc.z)
 //   CUSTOM2 (vec4)  = (vc.w, vd.x, vd.y, vd.z)
-//   CUSTOM3 (vec4)  = (vd.w, vertex_id, 0, 0)
+//   CUSTOM3 (vec4)  = (vd.w, vertex_id, nd.w, 0)
+//
+// Normals (4D, 4 per tet vertex = 16 floats):
+//   NORMAL  (vec3)  = na.xyz
+//   TANGENT (vec4)  = (na.w, nb.x, nb.y, nb.z)
+//   COLOR   (rgba)  = (nb.w, nc.x, nc.y, nc.z) bias-encoded: (n+1)/2
+//   UV      (vec2)  = (nc.w, nd.x)
+//   UV2     (vec2)  = (nd.y, nd.z)
+//   CUSTOM3.z       = nd.w
+//
+// COLOR is 8-bit RGBA so normals there use bias encoding
+// ((n+1)/2 maps [-1,1] to [0,1]). Precision loss is ~0.008
+// per component, acceptable after normalize().
 // ============================================================
 void VisualInstance4D::upload_gpu_mesh() {
 	if (!_rs_mesh.is_valid()) return;
@@ -120,6 +133,11 @@ void VisualInstance4D::upload_gpu_mesh() {
 
 	// Accumulate all tetrahedra from all surfaces
 	PackedVector3Array gpu_verts;
+	PackedVector3Array gpu_normals;
+	PackedFloat32Array gpu_tangents;
+	PackedColorArray gpu_colors;
+	PackedVector2Array gpu_uvs;
+	PackedVector2Array gpu_uv2s;
 	PackedFloat32Array gpu_custom0, gpu_custom1, gpu_custom2, gpu_custom3;
 	PackedInt32Array gpu_indices;
 
@@ -134,12 +152,24 @@ void VisualInstance4D::upload_gpu_mesh() {
 
 		if (verts4d.is_empty() || indices4d.is_empty()) continue;
 
+		// Read normals (4 floats per vertex, may be empty)
+		PackedFloat32Array normals4d;
+		if (arrays[Mesh4D::ARRAY_NORMAL].get_type() == Variant::PACKED_FLOAT32_ARRAY) {
+			normals4d = arrays[Mesh4D::ARRAY_NORMAL];
+		}
+		bool has_normals = !normals4d.is_empty();
+
 		int tet_count = indices4d.size() / 4;
 
 		// Pre-allocate (6 GPU verts per tet)
 		int new_verts = tet_count * 6;
 		int base = gpu_verts.size();
 		gpu_verts.resize(base + new_verts);
+		gpu_normals.resize(base + new_verts);
+		gpu_tangents.resize((base + new_verts) * 4);
+		gpu_colors.resize(base + new_verts);
+		gpu_uvs.resize(base + new_verts);
+		gpu_uv2s.resize(base + new_verts);
 		gpu_custom0.resize((base + new_verts) * 4);
 		gpu_custom1.resize((base + new_verts) * 4);
 		gpu_custom2.resize((base + new_verts) * 4);
@@ -160,10 +190,23 @@ void VisualInstance4D::upload_gpu_mesh() {
 				vd[k] = verts4d[i3 * 4 + k];
 			}
 
+			// Read the 4 tetrahedron normals (each 4 floats: x,y,z,w)
+			float na[4] = {0,1,0,0}, nb[4] = {0,1,0,0};
+			float nc[4] = {0,1,0,0}, nd[4] = {0,1,0,0};
+			if (has_normals) {
+				for (int k = 0; k < 4; k++) {
+					na[k] = normals4d[i0 * 4 + k];
+					nb[k] = normals4d[i1 * 4 + k];
+					nc[k] = normals4d[i2 * 4 + k];
+					nd[k] = normals4d[i3 * 4 + k];
+				}
+			}
+
 			// Write 6 GPU vertices for this tetrahedron
 			for (int v = 0; v < 6; v++) {
 				int gi = base + t * 6 + v;
 
+				// === Positions ===
 				// VERTEX = va.xyz
 				gpu_verts[gi] = Vector3(va[0], va[1], va[2]);
 
@@ -186,11 +229,36 @@ void VisualInstance4D::upload_gpu_mesh() {
 				gpu_custom2[c0 + 2] = vd[1];
 				gpu_custom2[c0 + 3] = vd[2];
 
-				// CUSTOM3 = (vd.w, vertex_id, 0, 0)
+				// CUSTOM3 = (vd.w, vertex_id, nd.w, 0)
 				gpu_custom3[c0 + 0] = vd[3];
 				gpu_custom3[c0 + 1] = (float)v;
-				gpu_custom3[c0 + 2] = 0.0f;
+				gpu_custom3[c0 + 2] = nd[3]; // nd.w packed here
 				gpu_custom3[c0 + 3] = 0.0f;
+
+				// === Normals ===
+				// NORMAL = na.xyz (full precision)
+				gpu_normals[gi] = Vector3(na[0], na[1], na[2]);
+
+				// TANGENT = (na.w, nb.x, nb.y, nb.z) (full precision)
+				gpu_tangents[c0 + 0] = na[3];
+				gpu_tangents[c0 + 1] = nb[0];
+				gpu_tangents[c0 + 2] = nb[1];
+				gpu_tangents[c0 + 3] = nb[2];
+
+				// COLOR = (nb.w, nc.x, nc.y, nc.z) bias-encoded: (n+1)/2
+				gpu_colors[gi] = Color(
+					(nb[3] + 1.0f) * 0.5f,
+					(nc[0] + 1.0f) * 0.5f,
+					(nc[1] + 1.0f) * 0.5f,
+					(nc[2] + 1.0f) * 0.5f
+				);
+
+				// UV = (nc.w, nd.x)
+				gpu_uvs[gi] = Vector2(nc[3], nd[0]);
+
+				// UV2 = (nd.y, nd.z)
+				gpu_uv2s[gi] = Vector2(nd[1], nd[2]);
+				// nd.w is in CUSTOM3.z above
 			}
 
 			// Indices: two triangles per tet — (0,1,2) and (3,4,5)
@@ -215,14 +283,23 @@ void VisualInstance4D::upload_gpu_mesh() {
 	Array arrays;
 	arrays.resize(RenderingServer::ARRAY_MAX);
 	arrays[RenderingServer::ARRAY_VERTEX] = gpu_verts;
+	arrays[RenderingServer::ARRAY_NORMAL] = gpu_normals;
+	arrays[RenderingServer::ARRAY_TANGENT] = gpu_tangents;
+	arrays[RenderingServer::ARRAY_COLOR] = gpu_colors;
+	arrays[RenderingServer::ARRAY_TEX_UV] = gpu_uvs;
+	arrays[RenderingServer::ARRAY_TEX_UV2] = gpu_uv2s;
 	arrays[RenderingServer::ARRAY_CUSTOM0] = gpu_custom0;
 	arrays[RenderingServer::ARRAY_CUSTOM1] = gpu_custom1;
 	arrays[RenderingServer::ARRAY_CUSTOM2] = gpu_custom2;
 	arrays[RenderingServer::ARRAY_CUSTOM3] = gpu_custom3;
 	arrays[RenderingServer::ARRAY_INDEX] = gpu_indices;
 
-	// Set custom format flags: all CUSTOM channels are RGBA_FLOAT (4 floats each)
 	uint64_t fmt = (uint64_t)RenderingServer::ARRAY_FORMAT_VERTEX
+		| (uint64_t)RenderingServer::ARRAY_FORMAT_NORMAL
+		| (uint64_t)RenderingServer::ARRAY_FORMAT_TANGENT
+		| (uint64_t)RenderingServer::ARRAY_FORMAT_COLOR
+		| (uint64_t)RenderingServer::ARRAY_FORMAT_TEX_UV
+		| (uint64_t)RenderingServer::ARRAY_FORMAT_TEX_UV2
 		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM0
 		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM1
 		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM2
