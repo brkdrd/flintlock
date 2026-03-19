@@ -131,7 +131,7 @@ void Slicer4D::_generate_lut() {
 String Slicer4D::_get_shader_code() const {
 	return R"(
 shader_type spatial;
-render_mode cull_disabled, skip_vertex_transform;
+render_mode cull_disabled;
 
 // Global uniforms (set by Slicer4D per frame)
 uniform mat4 camera_basis_4d;
@@ -151,7 +151,6 @@ instance uniform float roughness_value = 1.0;
 instance uniform float metallic_value = 0.0;
 instance uniform float instance_valid = 0.0;
 
-varying vec3 v_normal_3d;
 varying float v_degenerate;
 
 void vertex() {
@@ -192,7 +191,7 @@ void vertex() {
 	int ep_a = int(lut_val.r * 255.0 + 0.5);
 	int ep_b = int(lut_val.g * 255.0 + 0.5);
 
-	// Degenerate check — collapse to produce zero-area triangle behind camera
+	// Degenerate check — collapse to produce zero-area triangle
 	// instance_valid defaults to 0.0; set to 1.0 by update_shader_transforms()
 	bool degenerate = (ep_a > 3 || ep_b > 3) || (instance_valid < 0.5);
 	v_degenerate = degenerate ? 1.0 : 0.0;
@@ -203,9 +202,8 @@ void vertex() {
 	int ia = degenerate ? 0 : safe_a;
 	int ib = degenerate ? 0 : safe_b;
 
-	// Branchless select helpers — avoid dynamically-indexed local arrays
-	// which cause pathological codegen on AMD RDNA (cascading conditionals).
-	// Multiply-add is cheap and fully pipelined on all GPU architectures.
+	// Branchless select — avoids dynamically-indexed local arrays
+	// which cause pathological codegen on AMD RDNA.
 	float sa0 = float(ia == 0), sa1 = float(ia == 1), sa2 = float(ia == 2), sa3 = float(ia == 3);
 	float sb0 = float(ib == 0), sb1 = float(ib == 1), sb2 = float(ib == 2), sb3 = float(ib == 3);
 
@@ -229,47 +227,32 @@ void vertex() {
 	vec4 interp_normal_4d = degenerate ? vec4(0.0, 1.0, 0.0, 0.0) : mix(n0, n1, t);
 
 	// Project 4D intersection to 3D using camera basis columns 0,1,2
-	vec3 pos_3d;
-	pos_3d.x = dot(camera_basis_4d[0], intersection_4d);
-	pos_3d.y = dot(camera_basis_4d[1], intersection_4d);
-	pos_3d.z = dot(camera_basis_4d[2], intersection_4d);
+	// Output is in world space. MODEL_MATRIX is identity, so Godot applies
+	// VIEW_MATRIX * vec4(VERTEX, 1.0) automatically.
+	VERTEX.x = dot(camera_basis_4d[0], intersection_4d);
+	VERTEX.y = dot(camera_basis_4d[1], intersection_4d);
+	VERTEX.z = dot(camera_basis_4d[2], intersection_4d);
 
-	// Project 4D normal to 3D using camera basis (same projection)
-	vec3 normal_3d;
-	normal_3d.x = dot(camera_basis_4d[0], interp_normal_4d);
-	normal_3d.y = dot(camera_basis_4d[1], interp_normal_4d);
-	normal_3d.z = dot(camera_basis_4d[2], interp_normal_4d);
-	v_normal_3d = normal_3d;
-
-	// VERTEX must be in view space for Godot's built-in lighting pipeline
-	// (skip_vertex_transform skips MODEL_MATRIX; we must also apply VIEW_MATRIX)
-	VERTEX = (VIEW_MATRIX * vec4(pos_3d, 1.0)).xyz;
-
-	// Explicit clip-space position (overrides default VERTEX projection)
-	POSITION = PROJECTION_MATRIX * vec4(VERTEX, 1.0);
-
-	// Set NORMAL in vertex shader too (used by shadow pass which skips fragment)
-	vec3 vn = normalize(normal_3d);
-	if (dot(vn, VIEW_MATRIX[2].xyz) < 0.0) vn = -vn;
-	NORMAL = normalize((VIEW_MATRIX * vec4(vn, 0.0)).xyz);
+	// Project 4D normal to 3D world space. Godot applies the normal matrix
+	// (inverse-transpose of modelview) automatically. Since MODEL_MATRIX is
+	// identity, this is just the view rotation — correct for world-space normals.
+	vec3 n_world;
+	n_world.x = dot(camera_basis_4d[0], interp_normal_4d);
+	n_world.y = dot(camera_basis_4d[1], interp_normal_4d);
+	n_world.z = dot(camera_basis_4d[2], interp_normal_4d);
+	NORMAL = normalize(n_world);
 }
 
 void fragment() {
-	// Discard degenerate triangles that slipped through zero-area culling
 	if (v_degenerate > 0.5) discard;
 
-	// Use analytical normal interpolated from 4D vertex normals
-	vec3 n = normalize(v_normal_3d);
-
-	// Ensure normal faces the camera.
-	// VIEW_MATRIX[2].xyz = camera's backward direction in world space.
-	// Flip when dot < 0 (normal points away from viewer).
-	if (dot(n, VIEW_MATRIX[2].xyz) < 0.0) {
-		n = -n;
+	// Ensure normal faces the camera (cull_disabled means back faces visible).
+	// NORMAL is already in view space at this point (Godot transformed it).
+	// In view space, camera looks down -Z, so front-facing normals have z < 0.
+	if (!FRONT_FACING) {
+		NORMAL = -NORMAL;
 	}
 
-	// Transform world-space normal to view space for Godot's lighting
-	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 	ALBEDO = albedo_color.rgb;
 	ROUGHNESS = roughness_value;
 	METALLIC = metallic_value;
