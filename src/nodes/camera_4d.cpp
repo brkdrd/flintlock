@@ -72,6 +72,10 @@ void Camera4D::_notification(int p_what) {
 			if (_current) {
 				_internal_camera->make_current();
 			}
+			// Process before other nodes (default priority=0) so that
+			// Slicer4D uniforms and Camera3D position are up-to-date
+			// before Light4D::_project_light() reads them.
+			set_process_priority(-100);
 			set_process(true);
 		} break;
 

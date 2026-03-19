@@ -238,8 +238,10 @@ void VisualInstance4D::upload_gpu_mesh() {
 	// Apply the shared slicer material
 	rs->mesh_surface_set_material(_rs_mesh, 0, shared_material);
 
-	// Set a large AABB so frustum culling doesn't clip our shader-moved vertices
-	rs->mesh_set_custom_aabb(_rs_mesh, AABB(Vector3(-1000, -1000, -1000), Vector3(2000, 2000, 2000)));
+	// AABB must be large enough that frustum culling never clips our
+	// shader-moved vertices, but small enough for usable shadow maps.
+	// 500 units covers any realistic scene while keeping shadow precision.
+	rs->mesh_set_custom_aabb(_rs_mesh, AABB(Vector3(-250, -250, -250), Vector3(500, 500, 500)));
 
 	// Identity transform — vertex shader handles positioning
 	rs->instance_set_transform(_rs_instance, Transform3D());

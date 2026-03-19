@@ -238,8 +238,12 @@ void fragment() {
 	vec3 dy = dFdy(world_pos);
 	vec3 n = normalize(cross(dx, dy));
 
-	// Ensure normal faces the camera (VIEW_MATRIX[2].xyz = camera Z axis in world space)
-	if (dot(n, VIEW_MATRIX[2].xyz) > 0.0) {
+	// Ensure normal faces the camera.
+	// VIEW_MATRIX[2].xyz = camera's backward direction in world space (+Z).
+	// cross(dFdx, dFdy) in Vulkan produces normals pointing AWAY from the
+	// viewer for front-facing geometry (dFdy Y-axis is flipped vs OpenGL).
+	// Flip when dot < 0 (normal points away from camera backward = away from viewer).
+	if (dot(n, VIEW_MATRIX[2].xyz) < 0.0) {
 		n = -n;
 	}
 
