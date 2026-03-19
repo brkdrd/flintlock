@@ -163,11 +163,11 @@ void vertex() {
 	int vertex_id = int(CUSTOM3.y + 0.5);
 
 	// Reconstruct 4 tetrahedron normals from packed attributes
-	// NORMAL(vec3) + TANGENT(vec4) + COLOR(vec4,bias) + UV(vec2) + UV2(vec2) + CUSTOM3.z
+	// NORMAL(vec3) + TANGENT(vec3) + COLOR(vec4,bias) + UV(vec2) + UV2(vec2) + CUSTOM3.zw
 	vec4 na = vec4(NORMAL.x, NORMAL.y, NORMAL.z, TANGENT.x);
-	vec4 nb = vec4(TANGENT.y, TANGENT.z, TANGENT.w, COLOR.x * 2.0 - 1.0);
-	vec4 nc = vec4(COLOR.y * 2.0 - 1.0, COLOR.z * 2.0 - 1.0, COLOR.w * 2.0 - 1.0, UV.x);
-	vec4 nd = vec4(UV.y, UV2.x, UV2.y, CUSTOM3.z);
+	vec4 nb = vec4(TANGENT.y, TANGENT.z, COLOR.x * 2.0 - 1.0, COLOR.y * 2.0 - 1.0);
+	vec4 nc = vec4(COLOR.z * 2.0 - 1.0, COLOR.w * 2.0 - 1.0, UV.x, UV.y);
+	vec4 nd = vec4(UV2.x, UV2.y, CUSTOM3.z, CUSTOM3.w);
 
 	// Reconstruct 4x4 model basis from columns
 	mat4 model_4d_basis = mat4(model_4d_col0, model_4d_col1, model_4d_col2, model_4d_col3);

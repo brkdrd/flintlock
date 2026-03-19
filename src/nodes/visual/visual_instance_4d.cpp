@@ -102,15 +102,15 @@ void VisualInstance4D::_on_transform_4d_changed() {
 //   CUSTOM0 (vec4)  = (va.w, vb.x, vb.y, vb.z)
 //   CUSTOM1 (vec4)  = (vb.w, vc.x, vc.y, vc.z)
 //   CUSTOM2 (vec4)  = (vc.w, vd.x, vd.y, vd.z)
-//   CUSTOM3 (vec4)  = (vd.w, vertex_id, nd.w, 0)
+//   CUSTOM3 (vec4)  = (vd.w, vertex_id, nd.z, nd.w)
 //
 // Normals (4D, 4 per tet vertex = 16 floats):
 //   NORMAL  (vec3)  = na.xyz
-//   TANGENT (vec4)  = (na.w, nb.x, nb.y, nb.z)
-//   COLOR   (rgba)  = (nb.w, nc.x, nc.y, nc.z) bias-encoded: (n+1)/2
-//   UV      (vec2)  = (nc.w, nd.x)
-//   UV2     (vec2)  = (nd.y, nd.z)
-//   CUSTOM3.z       = nd.w
+//   TANGENT (vec3)  = (na.w, nb.x, nb.y)  [4th tangent float = binormal sign, inaccessible]
+//   COLOR   (rgba)  = (nb.z, nb.w, nc.x, nc.y) bias-encoded: (n+1)/2
+//   UV      (vec2)  = (nc.z, nc.w)
+//   UV2     (vec2)  = (nd.x, nd.y)
+//   CUSTOM3.zw      = (nd.z, nd.w)
 //
 // COLOR is 8-bit RGBA so normals there use bias encoding
 // ((n+1)/2 maps [-1,1] to [0,1]). Precision loss is ~0.008
@@ -229,36 +229,36 @@ void VisualInstance4D::upload_gpu_mesh() {
 				gpu_custom2[c0 + 2] = vd[1];
 				gpu_custom2[c0 + 3] = vd[2];
 
-				// CUSTOM3 = (vd.w, vertex_id, nd.w, 0)
+				// CUSTOM3 = (vd.w, vertex_id, nd.z, nd.w)
 				gpu_custom3[c0 + 0] = vd[3];
 				gpu_custom3[c0 + 1] = (float)v;
-				gpu_custom3[c0 + 2] = nd[3]; // nd.w packed here
-				gpu_custom3[c0 + 3] = 0.0f;
+				gpu_custom3[c0 + 2] = nd[2]; // nd.z packed here
+				gpu_custom3[c0 + 3] = nd[3]; // nd.w packed here
 
 				// === Normals ===
 				// NORMAL = na.xyz (full precision)
 				gpu_normals[gi] = Vector3(na[0], na[1], na[2]);
 
-				// TANGENT = (na.w, nb.x, nb.y, nb.z) (full precision)
+				// TANGENT = (na.w, nb.x, nb.y, sign) — 4th float is binormal sign, not accessible as TANGENT.w
 				gpu_tangents[c0 + 0] = na[3];
 				gpu_tangents[c0 + 1] = nb[0];
 				gpu_tangents[c0 + 2] = nb[1];
-				gpu_tangents[c0 + 3] = nb[2];
+				gpu_tangents[c0 + 3] = 1.0f;
 
-				// COLOR = (nb.w, nc.x, nc.y, nc.z) bias-encoded: (n+1)/2
+				// COLOR = (nb.z, nb.w, nc.x, nc.y) bias-encoded: (n+1)/2
 				gpu_colors[gi] = Color(
+					(nb[2] + 1.0f) * 0.5f,
 					(nb[3] + 1.0f) * 0.5f,
 					(nc[0] + 1.0f) * 0.5f,
-					(nc[1] + 1.0f) * 0.5f,
-					(nc[2] + 1.0f) * 0.5f
+					(nc[1] + 1.0f) * 0.5f
 				);
 
-				// UV = (nc.w, nd.x)
-				gpu_uvs[gi] = Vector2(nc[3], nd[0]);
+				// UV = (nc.z, nc.w)
+				gpu_uvs[gi] = Vector2(nc[2], nc[3]);
 
-				// UV2 = (nd.y, nd.z)
-				gpu_uv2s[gi] = Vector2(nd[1], nd[2]);
-				// nd.w is in CUSTOM3.z above
+				// UV2 = (nd.x, nd.y)
+				gpu_uv2s[gi] = Vector2(nd[0], nd[1]);
+				// nd.z and nd.w are in CUSTOM3.zw
 			}
 
 			// Indices: two triangles per tet — (0,1,2) and (3,4,5)
