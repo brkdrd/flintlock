@@ -215,10 +215,10 @@ void vertex() {
 
 	// Unpack 4D normals from 8-bit quantized format
 	// Each uint32 holds 4 bytes: x|(y<<8)|(z<<16)|(w<<24), decode to [-127,127]
-	vec4 na4d = vec4(uvec4(pna, pna >> 8u, pna >> 16u, pna >> 24u) & 0xFFu) - 128.0;
-	vec4 nb4d = vec4(uvec4(pnb, pnb >> 8u, pnb >> 16u, pnb >> 24u) & 0xFFu) - 128.0;
-	vec4 nc4d = vec4(uvec4(pnc, pnc >> 8u, pnc >> 16u, pnc >> 24u) & 0xFFu) - 128.0;
-	vec4 nd4d = vec4(uvec4(pnd, pnd >> 8u, pnd >> 16u, pnd >> 24u) & 0xFFu) - 128.0;
+	vec4 na4d = vec4(uvec4(pna, pna >> 8u, pna >> 16u, pna >> 24u) & uvec4(0xFFu)) - 128.0;
+	vec4 nb4d = vec4(uvec4(pnb, pnb >> 8u, pnb >> 16u, pnb >> 24u) & uvec4(0xFFu)) - 128.0;
+	vec4 nc4d = vec4(uvec4(pnc, pnc >> 8u, pnc >> 16u, pnc >> 24u) & uvec4(0xFFu)) - 128.0;
+	vec4 nd4d = vec4(uvec4(pnd, pnd >> 8u, pnd >> 16u, pnd >> 24u) & uvec4(0xFFu)) - 128.0;
 
 	// Select endpoint normals (local space), then transform by model basis
 	vec4 n0 = model_4d_basis * (na4d * sa0 + nb4d * sa1 + nc4d * sa2 + nd4d * sa3);
