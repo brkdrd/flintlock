@@ -4,6 +4,23 @@
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/classes/viewport.hpp>
+#include <cstring>
+
+// Pack a 4D normal (components in [-1,1]) into a single uint32 using 8-bit
+// quantization, then bitcast to float for storage in a vertex attribute.
+// Encoding: byte = clamp(floor(component * 127 + 128), 1, 255)
+// Layout: x | (y << 8) | (z << 16) | (w << 24)
+// Zero normal (0,0,0,0) encodes as 0x80808080 and is detected in the shader.
+static float pack_normal_4d_as_float(float nx, float ny, float nz, float nw) {
+	auto to_byte = [](float v) -> uint32_t {
+		int b = (int)(v * 127.0f + 128.0f);
+		return (uint32_t)(b < 1 ? 1 : (b > 255 ? 255 : b));
+	};
+	uint32_t packed = to_byte(nx) | (to_byte(ny) << 8) | (to_byte(nz) << 16) | (to_byte(nw) << 24);
+	float result;
+	memcpy(&result, &packed, sizeof(float));
+	return result;
+}
 
 void VisualInstance4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_layers"), &VisualInstance4D::get_layers);
@@ -93,15 +110,21 @@ void VisualInstance4D::_on_transform_4d_changed() {
 // upload_gpu_mesh — Pack Mesh4D tetrahedra into GPU vertex format
 //
 // Each tetrahedron (4 vertices in 4D) becomes 6 GPU vertices
-// (2 triangles). All 4 tet vertices are packed into every GPU
-// vertex across VERTEX and CUSTOM0-3.
+// (2 triangles). All 4 tet vertices + packed normals are stored
+// in every GPU vertex across VERTEX, CUSTOM0-3, and UV.
 //
-// Packing layout:
+// Positions:
 //   VERTEX  (vec3)  = va.xyz
 //   CUSTOM0 (vec4)  = (va.w, vb.x, vb.y, vb.z)
 //   CUSTOM1 (vec4)  = (vb.w, vc.x, vc.y, vc.z)
 //   CUSTOM2 (vec4)  = (vc.w, vd.x, vd.y, vd.z)
-//   CUSTOM3 (vec4)  = (vd.w, vertex_id, 0, 0)
+//   CUSTOM3 (vec4)  = (vd.w, vertex_id, packed_na, packed_nb)
+//
+// Normals (8-bit quantized, 4D normal → uint32 → bitcast float):
+//   CUSTOM3.z       = packed normal A (bitcast float)
+//   CUSTOM3.w       = packed normal B (bitcast float)
+//   UV.x            = packed normal C (bitcast float)
+//   UV.y            = packed normal D (bitcast float)
 // ============================================================
 void VisualInstance4D::upload_gpu_mesh() {
 	if (!_rs_mesh.is_valid()) return;
@@ -120,6 +143,7 @@ void VisualInstance4D::upload_gpu_mesh() {
 
 	// Accumulate all tetrahedra from all surfaces
 	PackedVector3Array gpu_verts;
+	PackedVector2Array gpu_uvs;
 	PackedFloat32Array gpu_custom0, gpu_custom1, gpu_custom2, gpu_custom3;
 	PackedInt32Array gpu_indices;
 
@@ -134,12 +158,20 @@ void VisualInstance4D::upload_gpu_mesh() {
 
 		if (verts4d.is_empty() || indices4d.is_empty()) continue;
 
+		// Read normals (4 floats per vertex, may be empty)
+		PackedFloat32Array normals4d;
+		if (arrays[Mesh4D::ARRAY_NORMAL].get_type() == Variant::PACKED_FLOAT32_ARRAY) {
+			normals4d = arrays[Mesh4D::ARRAY_NORMAL];
+		}
+		bool has_normals = (normals4d.size() >= verts4d.size());
+
 		int tet_count = indices4d.size() / 4;
 
 		// Pre-allocate (6 GPU verts per tet)
 		int new_verts = tet_count * 6;
 		int base = gpu_verts.size();
 		gpu_verts.resize(base + new_verts);
+		gpu_uvs.resize(base + new_verts);
 		gpu_custom0.resize((base + new_verts) * 4);
 		gpu_custom1.resize((base + new_verts) * 4);
 		gpu_custom2.resize((base + new_verts) * 4);
@@ -159,6 +191,22 @@ void VisualInstance4D::upload_gpu_mesh() {
 				vc[k] = verts4d[i2 * 4 + k];
 				vd[k] = verts4d[i3 * 4 + k];
 			}
+
+			// Pack 4D normals into uint32 (8-bit quantized), bitcast to float
+			float na[4] = {0,0,0,0}, nb[4] = {0,0,0,0};
+			float nc[4] = {0,0,0,0}, nd[4] = {0,0,0,0};
+			if (has_normals) {
+				for (int k = 0; k < 4; k++) {
+					na[k] = normals4d[i0 * 4 + k];
+					nb[k] = normals4d[i1 * 4 + k];
+					nc[k] = normals4d[i2 * 4 + k];
+					nd[k] = normals4d[i3 * 4 + k];
+				}
+			}
+			float packed_na = pack_normal_4d_as_float(na[0], na[1], na[2], na[3]);
+			float packed_nb = pack_normal_4d_as_float(nb[0], nb[1], nb[2], nb[3]);
+			float packed_nc = pack_normal_4d_as_float(nc[0], nc[1], nc[2], nc[3]);
+			float packed_nd = pack_normal_4d_as_float(nd[0], nd[1], nd[2], nd[3]);
 
 			// Write 6 GPU vertices for this tetrahedron
 			for (int v = 0; v < 6; v++) {
@@ -184,8 +232,10 @@ void VisualInstance4D::upload_gpu_mesh() {
 
 				gpu_custom3[c0 + 0] = vd[3];
 				gpu_custom3[c0 + 1] = (float)v;
-				gpu_custom3[c0 + 2] = 0.0f;
-				gpu_custom3[c0 + 3] = 0.0f;
+				gpu_custom3[c0 + 2] = packed_na;
+				gpu_custom3[c0 + 3] = packed_nb;
+
+				gpu_uvs[gi] = Vector2(packed_nc, packed_nd);
 			}
 
 			// Indices: two triangles per tet — (0,1,2) and (3,4,5)
@@ -206,10 +256,11 @@ void VisualInstance4D::upload_gpu_mesh() {
 		return;
 	}
 
-	// Build surface arrays — only positions + custom channels
+	// Build surface arrays — positions + custom channels + UV (packed normals)
 	Array arrays;
 	arrays.resize(RenderingServer::ARRAY_MAX);
 	arrays[RenderingServer::ARRAY_VERTEX] = gpu_verts;
+	arrays[RenderingServer::ARRAY_TEX_UV] = gpu_uvs;
 	arrays[RenderingServer::ARRAY_CUSTOM0] = gpu_custom0;
 	arrays[RenderingServer::ARRAY_CUSTOM1] = gpu_custom1;
 	arrays[RenderingServer::ARRAY_CUSTOM2] = gpu_custom2;
@@ -217,6 +268,7 @@ void VisualInstance4D::upload_gpu_mesh() {
 	arrays[RenderingServer::ARRAY_INDEX] = gpu_indices;
 
 	uint64_t fmt = (uint64_t)RenderingServer::ARRAY_FORMAT_VERTEX
+		| (uint64_t)RenderingServer::ARRAY_FORMAT_TEX_UV
 		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM0
 		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM1
 		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM2

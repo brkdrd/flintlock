@@ -152,6 +152,7 @@ instance uniform float metallic_value = 0.0;
 instance uniform float instance_valid = 0.0;
 
 varying float v_degenerate;
+varying float v_has_normals;
 
 void vertex() {
 	// Reconstruct 4 tetrahedron vertices from packed attributes
@@ -160,6 +161,13 @@ void vertex() {
 	vec4 vc = vec4(CUSTOM1.y, CUSTOM1.z, CUSTOM1.w, CUSTOM2.x);
 	vec4 vd = vec4(CUSTOM2.y, CUSTOM2.z, CUSTOM2.w, CUSTOM3.x);
 	int vertex_id = int(CUSTOM3.y + 0.5);
+
+	// Read packed 4D normals (uint32 quantized, bitcast as float)
+	// CUSTOM3.zw = normals A,B; UV.xy = normals C,D
+	uint pna = floatBitsToUint(CUSTOM3.z);
+	uint pnb = floatBitsToUint(CUSTOM3.w);
+	uint pnc = floatBitsToUint(UV.x);
+	uint pnd = floatBitsToUint(UV.y);
 
 	// Reconstruct 4x4 model basis from columns
 	mat4 model_4d_basis = mat4(model_4d_col0, model_4d_col1, model_4d_col2, model_4d_col3);
@@ -205,10 +213,24 @@ void vertex() {
 	float d0 = da * sa0 + db * sa1 + dc * sa2 + dd * sa3;
 	float d1 = da * sb0 + db * sb1 + dc * sb2 + dd * sb3;
 
+	// Unpack 4D normals from 8-bit quantized format
+	// Each uint32 holds 4 bytes: x|(y<<8)|(z<<16)|(w<<24), decode to [-127,127]
+	vec4 na4d = vec4(uvec4(pna, pna >> 8u, pna >> 16u, pna >> 24u) & 0xFFu) - 128.0;
+	vec4 nb4d = vec4(uvec4(pnb, pnb >> 8u, pnb >> 16u, pnb >> 24u) & 0xFFu) - 128.0;
+	vec4 nc4d = vec4(uvec4(pnc, pnc >> 8u, pnc >> 16u, pnc >> 24u) & 0xFFu) - 128.0;
+	vec4 nd4d = vec4(uvec4(pnd, pnd >> 8u, pnd >> 16u, pnd >> 24u) & 0xFFu) - 128.0;
+
+	// Select endpoint normals (local space), then transform by model basis
+	vec4 n0 = model_4d_basis * (na4d * sa0 + nb4d * sa1 + nc4d * sa2 + nd4d * sa3);
+	vec4 n1 = model_4d_basis * (na4d * sb0 + nb4d * sb1 + nc4d * sb2 + nd4d * sb3);
+
 	// Interpolate to find hyperplane crossing (where distance = 0)
 	float denom = d0 - d1;
 	float t = (abs(denom) > 1e-10) ? d0 / denom : 0.0;
 	vec4 intersection_4d = degenerate ? vec4(0.0) : mix(p0, p1, t);
+
+	// Interpolate normal at the crossing point
+	vec4 interp_normal_4d = mix(n0, n1, t);
 
 	// Project 4D intersection to 3D using camera basis columns 0,1,2.
 	// Output is in world space. MODEL_MATRIX is identity, so Godot
@@ -217,17 +239,31 @@ void vertex() {
 	VERTEX.y = dot(camera_basis_4d[1], intersection_4d);
 	VERTEX.z = dot(camera_basis_4d[2], intersection_4d);
 
-	// Dummy normal — fragment shader computes actual normal via dFdx/dFdy
-	NORMAL = vec3(0.0, 1.0, 0.0);
+	// Project 4D normal to 3D world space and set as NORMAL.
+	// Godot applies the normal matrix (inverse-transpose of modelview)
+	// automatically. Since MODEL_MATRIX is identity, this correctly
+	// transforms our world-space normal to view space.
+	vec3 n_world;
+	n_world.x = dot(camera_basis_4d[0], interp_normal_4d);
+	n_world.y = dot(camera_basis_4d[1], interp_normal_4d);
+	n_world.z = dot(camera_basis_4d[2], interp_normal_4d);
+
+	float nlen = degenerate ? 0.0 : length(n_world);
+	v_has_normals = (nlen > 0.01) ? 1.0 : 0.0;
+	NORMAL = (nlen > 0.01) ? n_world / nlen : vec3(0.0, 1.0, 0.0);
 }
 
 void fragment() {
 	if (v_degenerate > 0.5) discard;
 
-	// Compute flat normal from screen-space derivatives of the view-space
-	// position. VERTEX in the fragment shader is in view space (Godot
-	// transformed it), so the cross product is already in view space.
-	vec3 n = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
+	vec3 n;
+	if (v_has_normals > 0.5) {
+		// Smooth normal: re-normalize after rasterizer interpolation
+		n = normalize(NORMAL);
+	} else {
+		// Flat normal fallback from screen-space derivatives (view space)
+		n = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
+	}
 
 	// Ensure normal faces the camera (cull_disabled means back faces visible).
 	// In view space, camera looks down -Z, so front-facing normals have z < 0.

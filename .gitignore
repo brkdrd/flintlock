@@ -35,6 +35,9 @@ compile_commands.json
 *.idb
 *.exp
 
+# Implementation notes
+normals_implementation.md
+
 # Other stuff
 *.log
 
