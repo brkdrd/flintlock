@@ -161,13 +161,6 @@ void vertex() {
 	vec4 vd = vec4(CUSTOM2.y, CUSTOM2.z, CUSTOM2.w, CUSTOM3.x);
 	int vertex_id = int(CUSTOM3.y + 0.5);
 
-	// Reconstruct 4 tetrahedron normals from packed attributes
-	// NORMAL(vec3) + TANGENT(vec3) + COLOR(vec4,bias) + UV(vec2) + UV2(vec2) + CUSTOM3.zw
-	vec4 na = vec4(NORMAL.x, NORMAL.y, NORMAL.z, TANGENT.x);
-	vec4 nb = vec4(TANGENT.y, TANGENT.z, COLOR.x * 2.0 - 1.0, COLOR.y * 2.0 - 1.0);
-	vec4 nc = vec4(COLOR.z * 2.0 - 1.0, COLOR.w * 2.0 - 1.0, UV.x, UV.y);
-	vec4 nd = vec4(UV2.x, UV2.y, CUSTOM3.z, CUSTOM3.w);
-
 	// Reconstruct 4x4 model basis from columns
 	mat4 model_4d_basis = mat4(model_4d_col0, model_4d_col1, model_4d_col2, model_4d_col3);
 
@@ -212,47 +205,37 @@ void vertex() {
 	float d0 = da * sa0 + db * sa1 + dc * sa2 + dd * sa3;
 	float d1 = da * sb0 + db * sb1 + dc * sb2 + dd * sb3;
 
-	// Select normals in local space THEN transform — only 2 mat4*vec4 instead of 4
-	vec4 n0_local = na * sa0 + nb * sa1 + nc * sa2 + nd * sa3;
-	vec4 n1_local = na * sb0 + nb * sb1 + nc * sb2 + nd * sb3;
-	vec4 n0 = model_4d_basis * n0_local;
-	vec4 n1 = model_4d_basis * n1_local;
-
 	// Interpolate to find hyperplane crossing (where distance = 0)
 	float denom = d0 - d1;
 	float t = (abs(denom) > 1e-10) ? d0 / denom : 0.0;
 	vec4 intersection_4d = degenerate ? vec4(0.0) : mix(p0, p1, t);
 
-	// Interpolate normal at the crossing point
-	vec4 interp_normal_4d = degenerate ? vec4(0.0, 1.0, 0.0, 0.0) : mix(n0, n1, t);
-
-	// Project 4D intersection to 3D using camera basis columns 0,1,2
-	// Output is in world space. MODEL_MATRIX is identity, so Godot applies
-	// VIEW_MATRIX * vec4(VERTEX, 1.0) automatically.
+	// Project 4D intersection to 3D using camera basis columns 0,1,2.
+	// Output is in world space. MODEL_MATRIX is identity, so Godot
+	// applies VIEW_MATRIX automatically.
 	VERTEX.x = dot(camera_basis_4d[0], intersection_4d);
 	VERTEX.y = dot(camera_basis_4d[1], intersection_4d);
 	VERTEX.z = dot(camera_basis_4d[2], intersection_4d);
 
-	// Project 4D normal to 3D world space. Godot applies the normal matrix
-	// (inverse-transpose of modelview) automatically. Since MODEL_MATRIX is
-	// identity, this is just the view rotation — correct for world-space normals.
-	vec3 n_world;
-	n_world.x = dot(camera_basis_4d[0], interp_normal_4d);
-	n_world.y = dot(camera_basis_4d[1], interp_normal_4d);
-	n_world.z = dot(camera_basis_4d[2], interp_normal_4d);
-	NORMAL = normalize(n_world);
+	// Dummy normal — fragment shader computes actual normal via dFdx/dFdy
+	NORMAL = vec3(0.0, 1.0, 0.0);
 }
 
 void fragment() {
 	if (v_degenerate > 0.5) discard;
 
+	// Compute flat normal from screen-space derivatives of the view-space
+	// position. VERTEX in the fragment shader is in view space (Godot
+	// transformed it), so the cross product is already in view space.
+	vec3 n = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
+
 	// Ensure normal faces the camera (cull_disabled means back faces visible).
-	// NORMAL is already in view space at this point (Godot transformed it).
 	// In view space, camera looks down -Z, so front-facing normals have z < 0.
 	if (!FRONT_FACING) {
-		NORMAL = -NORMAL;
+		n = -n;
 	}
 
+	NORMAL = n;
 	ALBEDO = albedo_color.rgb;
 	ROUGHNESS = roughness_value;
 	METALLIC = metallic_value;
