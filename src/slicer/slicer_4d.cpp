@@ -178,13 +178,6 @@ void vertex() {
 	vec4 wc = model_4d_basis * vc + model_4d_origin;
 	vec4 wd = model_4d_basis * vd + model_4d_origin;
 
-	// Transform normals by model basis (correct for orthonormal bases;
-	// for non-uniform scaling, would need inverse-transpose)
-	vec4 wna = model_4d_basis * na;
-	vec4 wnb = model_4d_basis * nb;
-	vec4 wnc = model_4d_basis * nc;
-	vec4 wnd = model_4d_basis * nd;
-
 	// Signed distances to hyperplane
 	float da = dot(slice_normal, wa) - slice_d;
 	float db = dot(slice_normal, wb) - slice_d;
@@ -199,29 +192,33 @@ void vertex() {
 	int ep_a = int(lut_val.r * 255.0 + 0.5);
 	int ep_b = int(lut_val.g * 255.0 + 0.5);
 
-	// Select the two 4D endpoints and their distances
-	vec4 endpoints[4] = vec4[4](wa, wb, wc, wd);
-	vec4 endnormals[4] = vec4[4](wna, wnb, wnc, wnd);
-	float dists[4] = float[4](da, db, dc, dd);
-
 	// Degenerate check — collapse to produce zero-area triangle behind camera
 	// instance_valid defaults to 0.0; set to 1.0 by update_shader_transforms()
 	bool degenerate = (ep_a > 3 || ep_b > 3) || (instance_valid < 0.5);
 	v_degenerate = degenerate ? 1.0 : 0.0;
 
 	// Clamp indices to valid range to prevent GPU undefined behavior
-	// (some GPUs evaluate both ternary branches and may access out-of-bounds)
 	int safe_a = clamp(ep_a, 0, 3);
 	int safe_b = clamp(ep_b, 0, 3);
+	int ia = degenerate ? 0 : safe_a;
+	int ib = degenerate ? 0 : safe_b;
 
-	vec4 p0 = endpoints[degenerate ? 0 : safe_a];
-	vec4 p1 = endpoints[degenerate ? 0 : safe_b];
-	float d0 = dists[degenerate ? 0 : safe_a];
-	float d1 = dists[degenerate ? 0 : safe_b];
+	// Branchless select helpers — avoid dynamically-indexed local arrays
+	// which cause pathological codegen on AMD RDNA (cascading conditionals).
+	// Multiply-add is cheap and fully pipelined on all GPU architectures.
+	float sa0 = float(ia == 0), sa1 = float(ia == 1), sa2 = float(ia == 2), sa3 = float(ia == 3);
+	float sb0 = float(ib == 0), sb1 = float(ib == 1), sb2 = float(ib == 2), sb3 = float(ib == 3);
 
-	// Normal endpoints for interpolation
-	vec4 n0 = endnormals[degenerate ? 0 : safe_a];
-	vec4 n1 = endnormals[degenerate ? 0 : safe_b];
+	vec4 p0 = wa * sa0 + wb * sa1 + wc * sa2 + wd * sa3;
+	vec4 p1 = wa * sb0 + wb * sb1 + wc * sb2 + wd * sb3;
+	float d0 = da * sa0 + db * sa1 + dc * sa2 + dd * sa3;
+	float d1 = da * sb0 + db * sb1 + dc * sb2 + dd * sb3;
+
+	// Select normals in local space THEN transform — only 2 mat4*vec4 instead of 4
+	vec4 n0_local = na * sa0 + nb * sa1 + nc * sa2 + nd * sa3;
+	vec4 n1_local = na * sb0 + nb * sb1 + nc * sb2 + nd * sb3;
+	vec4 n0 = model_4d_basis * n0_local;
+	vec4 n1 = model_4d_basis * n1_local;
 
 	// Interpolate to find hyperplane crossing (where distance = 0)
 	float denom = d0 - d1;
