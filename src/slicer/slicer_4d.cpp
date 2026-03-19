@@ -267,7 +267,12 @@ void fragment() {
 
 	// Ensure normal faces the camera (cull_disabled means back faces visible).
 	// In view space, camera looks down -Z, so front-facing normals have z < 0.
-	if (!FRONT_FACING) {
+	// NOTE: We use the normal's z-component instead of FRONT_FACING because
+	// the slicer's LUT produces triangles with varying winding orders across
+	// sign patterns. FRONT_FACING depends on winding, which may disagree with
+	// the smooth normal direction, causing incorrect flips. The view-space
+	// z-check is winding-independent and works for both smooth and flat normals.
+	if (n.z > 0.0) {
 		n = -n;
 	}
 
