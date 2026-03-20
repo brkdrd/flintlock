@@ -40,10 +40,14 @@ void VisualInstance4D::_notification(int p_what) {
 
 			vs->instance_set_layer_mask(_vs_instance, _layers);
 
-			// Upload mesh data and initial transform
+			// Register this node as the transform source for the instance.
+			// Transforms are read LIVE during process_frame(), not cached.
+			vs->instance_set_source_node(_vs_instance, this);
+
+			// Upload mesh data and material params.
+			// Do NOT push transforms here — process_frame() handles it.
 			upload_mesh();
 			apply_material_params();
-			update_transform();
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
@@ -66,7 +70,10 @@ void VisualInstance4D::_notification(int p_what) {
 }
 
 void VisualInstance4D::_on_transform_4d_changed() {
-	update_transform();
+	// No-op: transforms are read LIVE from the node each frame during
+	// VisualServer4D::process_frame() → _update_instance_shader_transforms().
+	// Eagerly caching transforms here can cause phantom meshes when the
+	// cache is read before camera globals are set.
 }
 
 void VisualInstance4D::upload_mesh() {

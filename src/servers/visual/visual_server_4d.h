@@ -12,6 +12,7 @@
 using namespace godot;
 
 class Mesh4D;
+class VisualInstance4D;
 
 // ============================================================
 // VisualServer4D — Centralized 4D rendering server
@@ -51,13 +52,8 @@ class VisualServer4D : public Object {
 		bool visible = true;
 		uint32_t layers = 1;
 
-		// 4D transform (cached for per-frame updates)
-		// Stored as raw floats: 4x4 basis columns + 4D origin
-		float basis_col0[4] = {1,0,0,0};
-		float basis_col1[4] = {0,1,0,0};
-		float basis_col2[4] = {0,0,1,0};
-		float basis_col3[4] = {0,0,0,1};
-		float origin[4] = {0,0,0,0};
+		// Source node for reading live transforms each frame
+		VisualInstance4D *source_node = nullptr;
 
 		// Material params
 		Color albedo = Color(1,1,1,1);
@@ -164,6 +160,7 @@ public:
 	RID instance_create();
 	void instance_set_base(const RID &p_instance, const RID &p_base);
 	void instance_set_scenario(const RID &p_instance, const RID &p_scenario);
+	void instance_set_source_node(const RID &p_instance, VisualInstance4D *p_node);
 	void instance_set_transform_4d(const RID &p_instance,
 		const PackedFloat32Array &p_basis_cols, const Vector4 &p_origin);
 	void instance_set_visible(const RID &p_instance, bool p_visible);

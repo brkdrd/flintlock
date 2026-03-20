@@ -1,5 +1,9 @@
 #include "visual_server_4d.h"
+#include "../../nodes/visual/visual_instance_4d.h"
 #include "../../resources/mesh_4d.h"
+#include "../../math/transform4d.h"
+#include "../../math/basis4d.h"
+#include "../../math/vector4d.h"
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/image_texture.hpp>
@@ -341,21 +345,18 @@ void VisualServer4D::instance_set_scenario(const RID &p_instance, const RID &p_s
 	}
 }
 
+void VisualServer4D::instance_set_source_node(const RID &p_instance, VisualInstance4D *p_node) {
+	if (!_instances.has(p_instance)) return;
+	_instances[p_instance].source_node = p_node;
+}
+
 void VisualServer4D::instance_set_transform_4d(const RID &p_instance,
 	const PackedFloat32Array &p_basis_cols, const Vector4 &p_origin) {
-	if (!_instances.has(p_instance)) return;
-	Instance4D &inst = _instances[p_instance];
-
-	if (p_basis_cols.size() >= 16) {
-		memcpy(inst.basis_col0, &p_basis_cols[0], 4 * sizeof(float));
-		memcpy(inst.basis_col1, &p_basis_cols[4], 4 * sizeof(float));
-		memcpy(inst.basis_col2, &p_basis_cols[8], 4 * sizeof(float));
-		memcpy(inst.basis_col3, &p_basis_cols[12], 4 * sizeof(float));
-	}
-	inst.origin[0] = p_origin.x;
-	inst.origin[1] = p_origin.y;
-	inst.origin[2] = p_origin.z;
-	inst.origin[3] = p_origin.w;
+	// Kept for API completeness / GDScript usage, but nodes with
+	// source_node set will read transforms live during process_frame().
+	(void)p_instance;
+	(void)p_basis_cols;
+	(void)p_origin;
 }
 
 void VisualServer4D::instance_set_visible(const RID &p_instance, bool p_visible) {
@@ -866,10 +867,11 @@ void VisualServer4D::_upload_instance_mesh(Instance4D &inst, const Ref<Mesh4D> &
 	rs->mesh_set_custom_aabb(inst.rs_mesh, AABB(Vector3(-250, -250, -250), Vector3(500, 500, 500)));
 	rs->instance_set_transform(inst.rs_instance, Transform3D());
 
-	// Explicitly mark as invalid until process_frame() activates it.
-	// Don't rely on instance uniform defaults — they may not apply before
-	// the first instance_geometry_set_shader_parameter call.
-	rs->instance_geometry_set_shader_parameter(inst.rs_instance, "instance_valid", 0.0f);
+	// Do NOT set instance_valid here. The shader default (0.0) keeps vertices
+	// degenerate until process_frame() sets correct camera globals and then
+	// sets instance_valid=1.0 via _update_instance_shader_transforms().
+	// Explicitly setting it here can trigger per-instance uniform buffer
+	// creation before camera globals are ready, producing a phantom mesh.
 
 	inst.gpu_mesh_uploaded = true;
 }
@@ -879,15 +881,23 @@ void VisualServer4D::_upload_instance_mesh(Instance4D &inst, const Ref<Mesh4D> &
 // ============================================================
 void VisualServer4D::_update_instance_shader_transforms(Instance4D &inst) {
 	if (!inst.rs_instance.is_valid() || !inst.gpu_mesh_uploaded) return;
+	if (!inst.source_node) return;
+
+	// Read the LIVE transform from the node each frame,
+	// matching the reimplementation branch pattern that avoids phantoms.
+	Ref<Transform4D> gt = inst.source_node->get_global_transform_4d();
+	if (gt.is_null()) return;
+	Ref<Basis4D> basis = gt->get_basis();
+	Ref<Vector4D> origin = gt->get_origin();
+	if (basis.is_null() || origin.is_null()) return;
+
+	Vector4 col0(basis->data[0][0], basis->data[0][1], basis->data[0][2], basis->data[0][3]);
+	Vector4 col1(basis->data[1][0], basis->data[1][1], basis->data[1][2], basis->data[1][3]);
+	Vector4 col2(basis->data[2][0], basis->data[2][1], basis->data[2][2], basis->data[2][3]);
+	Vector4 col3(basis->data[3][0], basis->data[3][1], basis->data[3][2], basis->data[3][3]);
+	Vector4 model_origin(origin->x, origin->y, origin->z, origin->w);
 
 	RenderingServer *rs = RenderingServer::get_singleton();
-
-	Vector4 col0(inst.basis_col0[0], inst.basis_col0[1], inst.basis_col0[2], inst.basis_col0[3]);
-	Vector4 col1(inst.basis_col1[0], inst.basis_col1[1], inst.basis_col1[2], inst.basis_col1[3]);
-	Vector4 col2(inst.basis_col2[0], inst.basis_col2[1], inst.basis_col2[2], inst.basis_col2[3]);
-	Vector4 col3(inst.basis_col3[0], inst.basis_col3[1], inst.basis_col3[2], inst.basis_col3[3]);
-	Vector4 model_origin(inst.origin[0], inst.origin[1], inst.origin[2], inst.origin[3]);
-
 	rs->instance_geometry_set_shader_parameter(inst.rs_instance, "model_4d_col0", col0);
 	rs->instance_geometry_set_shader_parameter(inst.rs_instance, "model_4d_col1", col1);
 	rs->instance_geometry_set_shader_parameter(inst.rs_instance, "model_4d_col2", col2);
