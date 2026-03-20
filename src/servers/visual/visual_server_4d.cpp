@@ -249,7 +249,7 @@ void fragment() {
 		n = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
 	}
 
-	if (n.z > 0.0) {
+	if (n.z < 0.0) {
 		n = -n;
 	}
 
@@ -865,6 +865,11 @@ void VisualServer4D::_upload_instance_mesh(Instance4D &inst, const Ref<Mesh4D> &
 	rs->mesh_surface_set_material(inst.rs_mesh, 0, _material_rid);
 	rs->mesh_set_custom_aabb(inst.rs_mesh, AABB(Vector3(-250, -250, -250), Vector3(500, 500, 500)));
 	rs->instance_set_transform(inst.rs_instance, Transform3D());
+
+	// Explicitly mark as invalid until process_frame() activates it.
+	// Don't rely on instance uniform defaults — they may not apply before
+	// the first instance_geometry_set_shader_parameter call.
+	rs->instance_geometry_set_shader_parameter(inst.rs_instance, "instance_valid", 0.0f);
 
 	inst.gpu_mesh_uploaded = true;
 }

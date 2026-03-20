@@ -95,6 +95,12 @@ void Light4D::_notification(int p_what) {
 			}
 		} break;
 
+		case NOTIFICATION_VISIBILITY_4D_CHANGED: {
+			if (_vs_light.is_valid()) {
+				vs->light_set_visible(_vs_light, is_visible_in_tree());
+			}
+		} break;
+
 	}
 }
 
