@@ -1,8 +1,6 @@
 #include "omni_light_4d.h"
-#include "../camera_4d.h"
-#include <godot_cpp/classes/camera3d.hpp>
-#include <godot_cpp/classes/viewport.hpp>
-#include <godot_cpp/classes/omni_light3d.hpp>
+#include "../../servers/visual/visual_server_4d.h"
+#include <godot_cpp/classes/rendering_server.hpp>
 
 using namespace godot;
 
@@ -16,66 +14,26 @@ void OmniLight4D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "omni_attenuation", PROPERTY_HINT_EXP_EASING, "attenuation"), "set_omni_attenuation", "get_omni_attenuation");
 }
 
-Light3D *OmniLight4D::_create_light_node() {
-	return memnew(OmniLight3D);
-}
+void OmniLight4D::_notification(int p_what) {
+	Light4D::_notification(p_what);
 
-void OmniLight4D::_project_light() {
-	if (!_internal_light) return;
-
-	// Call parent to set 3D position
-	Light4D::_project_light();
-
-	// Find camera to compute W-distance for range attenuation
-	Viewport *vp = get_viewport();
-	Camera3D *cam3 = vp ? vp->get_camera_3d() : nullptr;
-	Camera4D *cam4 = cam3 ? Object::cast_to<Camera4D>(cam3->get_parent()) : nullptr;
-
-	OmniLight3D *omni = Object::cast_to<OmniLight3D>(_internal_light);
-	if (!omni) return;
-
-	if (cam4) {
-		// Get distance along the slice plane normal (the W-component distance)
-		Vector4 plane_normal = cam4->get_slice_plane_normal();
-		float plane_d = cam4->get_slice_plane_distance();
-
-		Ref<Transform4D> gt = get_global_transform_4d();
-		if (gt.is_null()) {
-			omni->set_param(Light3D::PARAM_RANGE, _omni_range);
-			return;
+	if (p_what == NOTIFICATION_ENTER_TREE) {
+		VisualServer4D *vs = VisualServer4D::get_singleton();
+		if (vs && _vs_light.is_valid()) {
+			vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_RANGE, _omni_range);
+			vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_ATTENUATION, _omni_attenuation);
 		}
-		Ref<Vector4D> pos = gt->get_origin();
-		if (pos.is_null()) {
-			omni->set_param(Light3D::PARAM_RANGE, _omni_range);
-			return;
-		}
-
-		Vector4 pos4(pos->x, pos->y, pos->z, pos->w);
-		float w_dist = Math::abs(plane_normal.dot(pos4) - plane_d);
-		float range_sq = _omni_range * _omni_range - w_dist * w_dist;
-
-		if (range_sq < 0.0f) {
-			// Light is beyond its range in W - hide it
-			_internal_light->set_visible(false);
-		} else {
-			_internal_light->set_visible(true);
-			omni->set_param(Light3D::PARAM_RANGE, Math::sqrt(range_sq));
-		}
-	} else {
-		// No camera, use full range
-		omni->set_param(Light3D::PARAM_RANGE, _omni_range);
 	}
-
-	omni->set_param(Light3D::PARAM_ATTENUATION, _omni_attenuation);
 }
 
 void OmniLight4D::set_omni_range(real_t p_range) {
 	_omni_range = p_range;
-	// Actual range on OmniLight3D is set in _project_light() per-frame
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_RANGE, _omni_range);
 }
 
 void OmniLight4D::set_omni_attenuation(real_t p_attenuation) {
 	_omni_attenuation = p_attenuation;
-	OmniLight3D *omni = Object::cast_to<OmniLight3D>(_internal_light);
-	if (omni) omni->set_param(Light3D::PARAM_ATTENUATION, _omni_attenuation);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_ATTENUATION, _omni_attenuation);
 }

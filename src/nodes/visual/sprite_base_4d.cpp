@@ -1,5 +1,4 @@
 #include "sprite_base_4d.h"
-#include "../../slicer/slicer_4d.h"
 #include "../../resources/material_4d.h"
 #include <godot_cpp/classes/standard_material3d.hpp>
 
@@ -40,7 +39,7 @@ void SpriteBase4D::_notification(int p_what) {
 
 	if (p_what == NOTIFICATION_ENTER_TREE) {
 		_mesh_dirty = true;
-		upload_gpu_mesh();
+		upload_mesh();
 	}
 }
 
@@ -245,41 +244,41 @@ Ref<Mesh4D> SpriteBase4D::get_mesh_4d() const {
 void SpriteBase4D::set_texture(const Ref<Texture2D> &p_tex) {
 	_texture = p_tex;
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void SpriteBase4D::set_modulate(const Color &p_color) {
 	_modulate = p_color;
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void SpriteBase4D::set_centered(bool p_centered) {
 	_centered = p_centered;
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void SpriteBase4D::set_offset(const Vector2 &p_offset) {
 	_offset = p_offset;
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void SpriteBase4D::set_pixel_size(real_t p_pixel_size) {
 	_pixel_size = p_pixel_size;
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void SpriteBase4D::set_axis(int p_axis) {
 	_axis = CLAMP(p_axis, 0, 3);
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void SpriteBase4D::set_double_sided(bool p_double_sided) {
 	_double_sided = p_double_sided;
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }

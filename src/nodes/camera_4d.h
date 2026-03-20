@@ -1,6 +1,5 @@
 #pragma once
 #include "node_4d.h"
-#include "../slicer/slicer_4d.h"
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/environment.hpp>
 #include <godot_cpp/classes/camera_attributes.hpp>
@@ -8,11 +7,13 @@
 
 using namespace godot;
 
+class VisualServer4D;
+
 // Camera4D - dual role:
 //   1. 4D: Its Transform4D defines the slice hyperplane. W column = slice normal.
-//   2. 3D: Owns an internal Camera3D that renders the sliced scene.
+//   2. 3D: VisualServer4D manages the internal Camera3D for rendering.
 //
-// Each frame, calls Slicer4D::update_frame() with the current hyperplane.
+// Each frame, calls VisualServer4D::process_frame() with the current hyperplane.
 class Camera4D : public Node4D {
 	GDCLASS(Camera4D, Node4D);
 
@@ -29,7 +30,6 @@ public:
 	};
 
 private:
-	Camera3D *_internal_camera = nullptr;
 	bool _current = false;
 	real_t _fov = 75.0f;
 	real_t _size = 1.0f;
@@ -44,11 +44,7 @@ private:
 	Ref<Environment> _environment;
 	Ref<CameraAttributes> _attributes;
 
-	// Cached slice state
-	Vector4 _cached_plane_normal;
-	float _cached_plane_d = 0.0f;
-
-	void _update_camera3d_properties();
+	void _update_camera_properties();
 	void _perform_slice();
 
 protected:
@@ -63,7 +59,7 @@ public:
 	void clear_current(bool p_enable_next = true);
 	bool is_current() const { return _current; }
 
-	// 3D camera properties (forwarded to internal Camera3D)
+	// 3D camera properties
 	real_t get_fov() const { return _fov; }
 	void set_fov(real_t p_fov);
 

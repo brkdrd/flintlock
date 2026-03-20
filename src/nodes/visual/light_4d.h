@@ -1,18 +1,15 @@
 #pragma once
-#include "visual_instance_4d.h"
-#include <godot_cpp/classes/light3d.hpp>
+#include "../node_4d.h"
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/rid.hpp>
 
 using namespace godot;
 
-// Forward declaration - full include in .cpp
-class Camera4D;
-
 // Light4D - abstract base for all 4D light types.
-// Creates an internal Light3D node (subclass-specific) and projects
-// the 4D light position to 3D each frame via _project_light().
-class Light4D : public VisualInstance4D {
-	GDCLASS(Light4D, VisualInstance4D);
+// Uses VisualServer4D light API instead of internal Light3D nodes.
+// VS4D handles 4D→3D light projection during process_frame().
+class Light4D : public Node4D {
+	GDCLASS(Light4D, Node4D);
 
 protected:
 	// Properties
@@ -29,17 +26,17 @@ protected:
 	bool _light_negative = false;
 	bool _editor_only = false;
 
-	// The internal 3D light node (owned, added as internal child)
-	Light3D *_internal_light = nullptr;
+	// VS4D light RID
+	RID _vs_light;
 
-	// Subclasses create the specific Light3D type
-	virtual Light3D *_create_light_node() = 0;
+	// Subclasses specify the light type (0=directional, 1=omni, 2=spot)
+	virtual int _get_light_type() const = 0;
 
-	// Project 4D position (and direction for directional/spot) to 3D
-	virtual void _project_light();
-
-	// Push all property values to _internal_light
+	// Push all property values to VS4D
 	void _update_light_properties();
+
+	// Push 4D transform to VS4D
+	void _update_light_transform();
 
 	static void _bind_methods();
 	void _notification(int p_what);

@@ -1,4 +1,5 @@
 #include "camera_4d.h"
+#include "../servers/visual/visual_server_4d.h"
 #include "../math/basis4d.h"
 #include "../math/transform4d.h"
 #include "../math/vector4d.h"
@@ -61,30 +62,23 @@ Camera4D::Camera4D() {}
 void Camera4D::_notification(int p_what) {
 	Node4D::_notification(p_what);
 
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs) return;
+
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
-			// Create internal Camera3D as child
-			_internal_camera = memnew(Camera3D);
-			add_child(_internal_camera);
-			_internal_camera->set_name("__InternalCamera3D__");
-			// Prevent it from showing up easily in the editor
-			_update_camera3d_properties();
+			vs->camera_attach_to_node(this);
+			_update_camera_properties();
 			if (_current) {
-				_internal_camera->make_current();
+				vs->camera_make_current();
 			}
-			// Process before other nodes (default priority=0) so that
-			// Slicer4D uniforms and Camera3D position are up-to-date
-			// before Light4D::_project_light() reads them.
 			set_process_priority(-100);
 			set_process(true);
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
 			set_process(false);
-			if (_internal_camera) {
-				_internal_camera->queue_free();
-				_internal_camera = nullptr;
-			}
+			vs->camera_detach();
 		} break;
 
 		case NOTIFICATION_PROCESS: {
@@ -92,42 +86,42 @@ void Camera4D::_notification(int p_what) {
 		} break;
 
 		case NOTIFICATION_TRANSFORM_4D_CHANGED: {
-			// GPU slicer handles camera changes via uniform updates each frame.
+			// Handled per-frame in _perform_slice()
 		} break;
 	}
 }
 
-void Camera4D::_update_camera3d_properties() {
-	if (!_internal_camera) return;
-	_internal_camera->set_fov(_fov);
-	_internal_camera->set_near(_near);
-	_internal_camera->set_far(_far);
-	_internal_camera->set_cull_mask(_cull_mask);
-	_internal_camera->set_h_offset(_h_offset);
-	_internal_camera->set_v_offset(_v_offset);
-	if (_environment.is_valid()) {
-		_internal_camera->set_environment(_environment);
-	}
-	if (_attributes.is_valid()) {
-		_internal_camera->set_attributes(_attributes);
-	}
-	// Set projection
+void Camera4D::_update_camera_properties() {
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs) return;
+
 	switch (_projection) {
 		case PROJECTION_PERSPECTIVE:
-			_internal_camera->set_perspective(_fov, _near, _far);
+			vs->camera_set_perspective(_fov, _near, _far);
 			break;
 		case PROJECTION_ORTHOGONAL:
-			_internal_camera->set_orthogonal(_size, _near, _far);
+			vs->camera_set_orthogonal(_size, _near, _far);
 			break;
 		default:
+			vs->camera_set_perspective(_fov, _near, _far);
 			break;
+	}
+
+	vs->camera_set_cull_mask(_cull_mask);
+	vs->camera_set_h_offset(_h_offset);
+	vs->camera_set_v_offset(_v_offset);
+	if (_environment.is_valid()) {
+		vs->camera_set_environment(_environment);
+	}
+	if (_attributes.is_valid()) {
+		vs->camera_set_attributes(_attributes);
 	}
 }
 
 void Camera4D::_perform_slice() {
-	if (!Slicer4D::get_singleton()) return;
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs) return;
 
-	// Get global 4D transform
 	Ref<Transform4D> gt = get_global_transform_4d();
 	if (gt.is_null()) return;
 
@@ -135,14 +129,14 @@ void Camera4D::_perform_slice() {
 	Ref<Vector4D> origin = gt->get_origin();
 	if (basis.is_null() || origin.is_null()) return;
 
-	// Slice plane: W column of basis is the normal, distance = normal.dot(origin) + slice_offset
+	// Slice plane: W column of basis is the normal
 	Ref<Vector4D> plane_normal_vec = basis->get_column(3);
 	if (plane_normal_vec.is_null()) return;
 
-	Vector4 plane_normal = Vector4(plane_normal_vec->x, plane_normal_vec->y, plane_normal_vec->z, plane_normal_vec->w);
+	Vector4 plane_normal(plane_normal_vec->x, plane_normal_vec->y, plane_normal_vec->z, plane_normal_vec->w);
 	float plane_d = plane_normal.dot(Vector4(origin->x, origin->y, origin->z, origin->w)) + _slice_offset;
 
-	// Basis columns 0,1,2 are the 3D axes within the slice
+	// Basis columns 0,1,2 for 3D projection
 	PackedFloat32Array basis_cols;
 	basis_cols.resize(12);
 	for (int col = 0; col < 3; col++) {
@@ -161,17 +155,7 @@ void Camera4D::_perform_slice() {
 	}
 
 	Vector4 camera_origin(origin->x, origin->y, origin->z, origin->w);
-	Slicer4D::get_singleton()->update_frame(plane_normal, plane_d, basis_cols, camera_origin);
-
-	// Position the internal Camera3D at the camera's projected 3D location.
-	if (_internal_camera) {
-		Vector4 col0(basis_cols[0], basis_cols[1], basis_cols[2], basis_cols[3]);
-		Vector4 col1(basis_cols[4], basis_cols[5], basis_cols[6], basis_cols[7]);
-		Vector4 col2(basis_cols[8], basis_cols[9], basis_cols[10], basis_cols[11]);
-		Transform3D cam_xform;
-		cam_xform.origin = Vector3(col0.dot(camera_origin), col1.dot(camera_origin), col2.dot(camera_origin));
-		_internal_camera->set_global_transform(cam_xform);
-	}
+	vs->process_frame(plane_normal, plane_d, basis_cols, camera_origin);
 }
 
 Vector4 Camera4D::get_slice_plane_normal() const {
@@ -195,23 +179,25 @@ float Camera4D::get_slice_plane_distance() const {
 
 void Camera4D::make_current() {
 	_current = true;
-	if (_internal_camera) _internal_camera->make_current();
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs) vs->camera_make_current();
 }
 
 void Camera4D::clear_current(bool p_enable_next) {
 	_current = false;
-	if (_internal_camera) _internal_camera->clear_current(p_enable_next);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs) vs->camera_clear_current(p_enable_next);
 }
 
-void Camera4D::set_fov(real_t p_fov) { _fov = p_fov; _update_camera3d_properties(); }
-void Camera4D::set_size(real_t p_size) { _size = p_size; _update_camera3d_properties(); }
-void Camera4D::set_near(real_t p_near) { _near = p_near; _update_camera3d_properties(); }
-void Camera4D::set_far(real_t p_far) { _far = p_far; _update_camera3d_properties(); }
-void Camera4D::set_projection(ProjectionType p_projection) { _projection = p_projection; _update_camera3d_properties(); }
+void Camera4D::set_fov(real_t p_fov) { _fov = p_fov; _update_camera_properties(); }
+void Camera4D::set_size(real_t p_size) { _size = p_size; _update_camera_properties(); }
+void Camera4D::set_near(real_t p_near) { _near = p_near; _update_camera_properties(); }
+void Camera4D::set_far(real_t p_far) { _far = p_far; _update_camera_properties(); }
+void Camera4D::set_projection(ProjectionType p_projection) { _projection = p_projection; _update_camera_properties(); }
 void Camera4D::set_keep_aspect(KeepAspect p_keep) { _keep_aspect = p_keep; }
-void Camera4D::set_cull_mask(uint32_t p_mask) { _cull_mask = p_mask; if (_internal_camera) _internal_camera->set_cull_mask(p_mask); }
-void Camera4D::set_h_offset(real_t p_offset) { _h_offset = p_offset; if (_internal_camera) _internal_camera->set_h_offset(p_offset); }
-void Camera4D::set_v_offset(real_t p_offset) { _v_offset = p_offset; if (_internal_camera) _internal_camera->set_v_offset(p_offset); }
+void Camera4D::set_cull_mask(uint32_t p_mask) { _cull_mask = p_mask; VisualServer4D *vs = VisualServer4D::get_singleton(); if (vs) vs->camera_set_cull_mask(p_mask); }
+void Camera4D::set_h_offset(real_t p_offset) { _h_offset = p_offset; VisualServer4D *vs = VisualServer4D::get_singleton(); if (vs) vs->camera_set_h_offset(p_offset); }
+void Camera4D::set_v_offset(real_t p_offset) { _v_offset = p_offset; VisualServer4D *vs = VisualServer4D::get_singleton(); if (vs) vs->camera_set_v_offset(p_offset); }
 void Camera4D::set_slice_offset(real_t p_offset) { _slice_offset = p_offset; }
-void Camera4D::set_environment(const Ref<Environment> &p_env) { _environment = p_env; if (_internal_camera) _internal_camera->set_environment(p_env); }
-void Camera4D::set_attributes(const Ref<CameraAttributes> &p_attrs) { _attributes = p_attrs; if (_internal_camera) _internal_camera->set_attributes(p_attrs); }
+void Camera4D::set_environment(const Ref<Environment> &p_env) { _environment = p_env; VisualServer4D *vs = VisualServer4D::get_singleton(); if (vs) vs->camera_set_environment(p_env); }
+void Camera4D::set_attributes(const Ref<CameraAttributes> &p_attrs) { _attributes = p_attrs; VisualServer4D *vs = VisualServer4D::get_singleton(); if (vs) vs->camera_set_attributes(p_attrs); }

@@ -1,5 +1,4 @@
 #include "animated_sprite_4d.h"
-#include "../../slicer/slicer_4d.h"
 
 using namespace godot;
 
@@ -118,7 +117,7 @@ void AnimatedSprite4D::_advance_frame(double p_delta) {
 	}
 
 	if (_mesh_dirty) {
-		upload_gpu_mesh();
+		upload_mesh();
 	}
 }
 
@@ -154,7 +153,7 @@ void AnimatedSprite4D::set_sprite_frames(const Ref<SpriteFrames4D> &p_frames) {
 	_frame_progress = 0.0f;
 	_frame_texture_dirty = true;
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void AnimatedSprite4D::set_animation(const StringName &p_animation) {
@@ -164,7 +163,7 @@ void AnimatedSprite4D::set_animation(const StringName &p_animation) {
 	_frame_progress = 0.0f;
 	_frame_texture_dirty = true;
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void AnimatedSprite4D::set_frame(int p_frame) {
@@ -174,7 +173,7 @@ void AnimatedSprite4D::set_frame(int p_frame) {
 	_frame_texture_dirty = true;
 	_mesh_dirty = true;
 	emit_signal("frame_changed");
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void AnimatedSprite4D::set_frame_progress(float p_progress) {
@@ -217,7 +216,7 @@ void AnimatedSprite4D::stop() {
 	_frame_texture_dirty = true;
 	_mesh_dirty = true;
 	if (is_inside_tree()) set_process(false);
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void AnimatedSprite4D::set_loop(bool p_loop) {

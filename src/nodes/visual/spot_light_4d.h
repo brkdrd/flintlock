@@ -1,6 +1,5 @@
 #pragma once
 #include "light_4d.h"
-#include <godot_cpp/classes/spot_light3d.hpp>
 
 using namespace godot;
 
@@ -13,9 +12,9 @@ class SpotLight4D : public Light4D {
 	real_t _spot_angle_attenuation = 1.0f;
 
 protected:
-	Light3D *_create_light_node() override;
-	void _project_light() override;
+	int _get_light_type() const override { return 2; } // spot
 	static void _bind_methods();
+	void _notification(int p_what);
 
 public:
 	real_t get_spot_range() const { return _spot_range; }

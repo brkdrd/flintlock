@@ -1,8 +1,11 @@
 #include "light_4d.h"
-#include "../camera_4d.h"
-#include <godot_cpp/classes/camera3d.hpp>
+#include "../../servers/visual/visual_server_4d.h"
+#include "../../math/transform4d.h"
+#include "../../math/basis4d.h"
+#include "../../math/vector4d.h"
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/viewport.hpp>
-#include <godot_cpp/classes/light3d.hpp>
+#include <godot_cpp/classes/world3d.hpp>
 
 using namespace godot;
 
@@ -63,157 +66,150 @@ void Light4D::_bind_methods() {
 }
 
 void Light4D::_notification(int p_what) {
-	// Skip VisualInstance4D — lights have no mesh data, so creating RS
-	// mesh/instance RIDs and registering with Slicer4D is unnecessary
-	// and can pollute the rendering pipeline with empty instances.
 	Node4D::_notification(p_what);
+
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs) return;
 
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
-			_internal_light = _create_light_node();
-			if (_internal_light) {
-				add_child(_internal_light, false, INTERNAL_MODE_FRONT);
-				_update_light_properties();
+			_vs_light = vs->light_create(_get_light_type());
+
+			// Set scenario from viewport
+			Viewport *vp = get_viewport();
+			if (vp) {
+				Ref<World3D> world = vp->find_world_3d();
+				if (world.is_valid()) {
+					vs->light_set_scenario(_vs_light, world->get_scenario());
+				}
 			}
-			set_process(true);
+
+			_update_light_properties();
+			_update_light_transform();
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
-			if (_internal_light) {
-				_internal_light->queue_free();
-				_internal_light = nullptr;
+			if (_vs_light.is_valid()) {
+				vs->free_rid(_vs_light);
+				_vs_light = RID();
 			}
-			set_process(false);
 		} break;
 
-		case NOTIFICATION_PROCESS: {
-			_project_light();
+		case NOTIFICATION_TRANSFORM_4D_CHANGED: {
+			_update_light_transform();
 		} break;
 	}
 }
 
-void Light4D::_project_light() {
-	if (!_internal_light) return;
+void Light4D::_update_light_transform() {
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs || !_vs_light.is_valid()) return;
 
-	// Find active Camera4D via the current Camera3D
-	Viewport *vp = get_viewport();
-	if (!vp) return;
-	Camera3D *cam3 = vp->get_camera_3d();
-	Camera4D *cam4 = nullptr;
-	if (cam3) {
-		cam4 = Object::cast_to<Camera4D>(cam3->get_parent());
-	}
-
-	// Get 4D position of light
 	Ref<Transform4D> gt = get_global_transform_4d();
 	if (gt.is_null()) return;
-	Ref<Vector4D> pos4d = gt->get_origin();
-	if (pos4d.is_null()) return;
+	Ref<Basis4D> basis = gt->get_basis();
+	Ref<Vector4D> origin = gt->get_origin();
+	if (basis.is_null() || origin.is_null()) return;
 
-	if (!cam4) {
-		// No camera found - just zero the position
-		_internal_light->set_position(Vector3());
-		return;
+	PackedFloat32Array basis_cols;
+	basis_cols.resize(16);
+	for (int col = 0; col < 4; col++) {
+		basis_cols[col * 4 + 0] = basis->data[col][0];
+		basis_cols[col * 4 + 1] = basis->data[col][1];
+		basis_cols[col * 4 + 2] = basis->data[col][2];
+		basis_cols[col * 4 + 3] = basis->data[col][3];
 	}
 
-	// Get camera's global transform for projection
-	Ref<Transform4D> cam_gt = cam4->get_global_transform_4d();
-	if (cam_gt.is_null()) return;
-	Ref<Basis4D> cam_basis = cam_gt->get_basis();
-	if (cam_basis.is_null()) return;
-
-	// Project to 3D using camera basis columns 0,1,2.
-	// Must use ABSOLUTE projection (not camera-relative) to match the
-	// shader's mesh vertex projection. Camera3D's VIEW_MATRIX handles
-	// the camera-relative subtraction during rendering.
-	Ref<Vector4D> col0 = cam_basis->get_column(0);
-	Ref<Vector4D> col1 = cam_basis->get_column(1);
-	Ref<Vector4D> col2 = cam_basis->get_column(2);
-	if (col0.is_null() || col1.is_null() || col2.is_null()) return;
-
-	float px = pos4d->x, py = pos4d->y, pz = pos4d->z, pw = pos4d->w;
-	float x3 = col0->x * px + col0->y * py + col0->z * pz + col0->w * pw;
-	float y3 = col1->x * px + col1->y * py + col1->z * pz + col1->w * pw;
-	float z3 = col2->x * px + col2->y * py + col2->z * pz + col2->w * pw;
-
-	_internal_light->set_position(Vector3(x3, y3, z3));
+	Vector4 orig(origin->x, origin->y, origin->z, origin->w);
+	vs->light_set_transform_4d(_vs_light, basis_cols, orig);
 }
 
 void Light4D::_update_light_properties() {
-	if (!_internal_light) return;
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs || !_vs_light.is_valid()) return;
 
-	_internal_light->set_param(Light3D::PARAM_ENERGY, _light_energy);
-	_internal_light->set_param(Light3D::PARAM_INDIRECT_ENERGY, _light_indirect_energy);
-	_internal_light->set_param(Light3D::PARAM_SPECULAR, _light_specular);
-	_internal_light->set_param(Light3D::PARAM_SHADOW_BIAS, _shadow_bias);
-	_internal_light->set_param(Light3D::PARAM_SHADOW_NORMAL_BIAS, _shadow_normal_bias);
-	_internal_light->set_param(Light3D::PARAM_SHADOW_OPACITY, _shadow_opacity);
-	_internal_light->set_param(Light3D::PARAM_SHADOW_BLUR, _shadow_blur);
-	_internal_light->set_color(_light_color);
-	_internal_light->set_shadow(_shadow_enabled);
-	_internal_light->set_editor_only(_editor_only);
-	_internal_light->set_layer_mask(_light_cull_mask);
-	_internal_light->set_negative(_light_negative);
+	vs->light_set_color(_vs_light, _light_color);
+	vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_ENERGY, _light_energy);
+	vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_INDIRECT_ENERGY, _light_indirect_energy);
+	vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SPECULAR, _light_specular);
+	vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SHADOW_BIAS, _shadow_bias);
+	vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SHADOW_NORMAL_BIAS, _shadow_normal_bias);
+	vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SHADOW_OPACITY, _shadow_opacity);
+	vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SHADOW_BLUR, _shadow_blur);
+	vs->light_set_shadow(_vs_light, _shadow_enabled);
+	vs->light_set_negative(_vs_light, _light_negative);
+	vs->light_set_cull_mask(_vs_light, _light_cull_mask);
 }
 
-// ─── Setters ──────────────────────────────────────────────────────────────────
+// ── Setters ─────────────────────────────────────────────────────────────────
 
 void Light4D::set_light_color(const Color &p_color) {
 	_light_color = p_color;
-	if (_internal_light) _internal_light->set_color(_light_color);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_color(_vs_light, _light_color);
 }
 
 void Light4D::set_light_energy(real_t p_energy) {
 	_light_energy = p_energy;
-	if (_internal_light) _internal_light->set_param(Light3D::PARAM_ENERGY, _light_energy);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_ENERGY, _light_energy);
 }
 
 void Light4D::set_light_indirect_energy(real_t p_energy) {
 	_light_indirect_energy = p_energy;
-	if (_internal_light) _internal_light->set_param(Light3D::PARAM_INDIRECT_ENERGY, _light_indirect_energy);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_INDIRECT_ENERGY, _light_indirect_energy);
 }
 
 void Light4D::set_light_specular(real_t p_specular) {
 	_light_specular = p_specular;
-	if (_internal_light) _internal_light->set_param(Light3D::PARAM_SPECULAR, _light_specular);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SPECULAR, _light_specular);
 }
 
 void Light4D::set_shadow_enabled(bool p_enabled) {
 	_shadow_enabled = p_enabled;
-	if (_internal_light) _internal_light->set_shadow(_shadow_enabled);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_shadow(_vs_light, _shadow_enabled);
 }
 
 void Light4D::set_shadow_bias(real_t p_bias) {
 	_shadow_bias = p_bias;
-	if (_internal_light) _internal_light->set_param(Light3D::PARAM_SHADOW_BIAS, _shadow_bias);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SHADOW_BIAS, _shadow_bias);
 }
 
 void Light4D::set_shadow_normal_bias(real_t p_bias) {
 	_shadow_normal_bias = p_bias;
-	if (_internal_light) _internal_light->set_param(Light3D::PARAM_SHADOW_NORMAL_BIAS, _shadow_normal_bias);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SHADOW_NORMAL_BIAS, _shadow_normal_bias);
 }
 
 void Light4D::set_shadow_opacity(real_t p_opacity) {
 	_shadow_opacity = p_opacity;
-	if (_internal_light) _internal_light->set_param(Light3D::PARAM_SHADOW_OPACITY, _shadow_opacity);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SHADOW_OPACITY, _shadow_opacity);
 }
 
 void Light4D::set_shadow_blur(real_t p_blur) {
 	_shadow_blur = p_blur;
-	if (_internal_light) _internal_light->set_param(Light3D::PARAM_SHADOW_BLUR, _shadow_blur);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_param(_vs_light, RenderingServer::LIGHT_PARAM_SHADOW_BLUR, _shadow_blur);
 }
 
 void Light4D::set_light_cull_mask(uint32_t p_mask) {
 	_light_cull_mask = p_mask;
-	if (_internal_light) _internal_light->set_layer_mask(_light_cull_mask);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_cull_mask(_vs_light, _light_cull_mask);
 }
 
 void Light4D::set_light_negative(bool p_negative) {
 	_light_negative = p_negative;
-	if (_internal_light) _internal_light->set_negative(_light_negative);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_light.is_valid()) vs->light_set_negative(_vs_light, _light_negative);
 }
 
 void Light4D::set_editor_only(bool p_editor_only) {
 	_editor_only = p_editor_only;
-	if (_internal_light) _internal_light->set_editor_only(_editor_only);
+	// editor_only not directly supported via RS light API
 }

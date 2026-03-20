@@ -1,5 +1,4 @@
 #include "sprite_4d.h"
-#include "../../slicer/slicer_4d.h"
 
 using namespace godot;
 
@@ -57,7 +56,7 @@ void Sprite4D::set_hframes(int p_hframes) {
 		_frame = _hframes * _vframes - 1;
 	}
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void Sprite4D::set_vframes(int p_vframes) {
@@ -67,25 +66,25 @@ void Sprite4D::set_vframes(int p_vframes) {
 		_frame = _hframes * _vframes - 1;
 	}
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void Sprite4D::set_frame(int p_frame) {
 	_frame = CLAMP(p_frame, 0, MAX(_hframes * _vframes - 1, 0));
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void Sprite4D::set_region_enabled(bool p_enabled) {
 	_region_enabled = p_enabled;
 	_mesh_dirty = true;
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void Sprite4D::set_region_rect(const Rect2 &p_rect) {
 	_region_rect = p_rect;
 	if (_region_enabled) {
 		_mesh_dirty = true;
-		upload_gpu_mesh();
+		upload_mesh();
 	}
 }

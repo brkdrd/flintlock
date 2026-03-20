@@ -1,5 +1,5 @@
 #include "geometry_instance_4d.h"
-#include "../../slicer/slicer_4d.h"
+#include "../../servers/visual/visual_server_4d.h"
 
 void GeometryInstance4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_material_override"), &GeometryInstance4D::get_material_override);
@@ -28,9 +28,8 @@ Ref<Material> GeometryInstance4D::get_active_material_3d() const {
 }
 
 void GeometryInstance4D::apply_material_params() {
-	if (!_rs_instance.is_valid()) return;
-
-	RenderingServer *rs = RenderingServer::get_singleton();
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs || !_vs_instance.is_valid()) return;
 
 	Color albedo(1.0f, 1.0f, 1.0f, 1.0f);
 	float roughness = 1.0f;
@@ -42,7 +41,5 @@ void GeometryInstance4D::apply_material_params() {
 		metallic = _material_override->get_metallic();
 	}
 
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "albedo_color", albedo);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "roughness_value", roughness);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "metallic_value", metallic);
+	vs->instance_set_material_params(_vs_instance, albedo, roughness, metallic);
 }

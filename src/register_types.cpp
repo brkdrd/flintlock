@@ -21,7 +21,7 @@
 #include "servers/physics/physics_server_4d.h"
 #include "servers/physics/physics_direct_body_state_4d.h"
 #include "servers/physics/physics_direct_space_state_4d.h"
-#include "slicer/slicer_4d.h"
+#include "servers/visual/visual_server_4d.h"
 
 // Node hierarchy
 #include "nodes/node_4d.h"
@@ -112,10 +112,10 @@ void initialize_godot_4d_module(ModuleInitializationLevel p_level) {
 		PhysicsServer4D *physics_server = memnew(PhysicsServer4D);
 		Engine::get_singleton()->register_singleton("PhysicsServer4D", physics_server);
 
-		// Slicer singleton
-		ClassDB::register_class<Slicer4D>();
-		Slicer4D *slicer = memnew(Slicer4D);
-		Engine::get_singleton()->register_singleton("Slicer4D", slicer);
+		// Visual server singleton
+		ClassDB::register_class<VisualServer4D>();
+		VisualServer4D *visual_server = memnew(VisualServer4D);
+		Engine::get_singleton()->register_singleton("VisualServer4D", visual_server);
 	}
 
 	if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
@@ -178,9 +178,9 @@ void uninitialize_godot_4d_module(ModuleInitializationLevel p_level) {
 			Engine::get_singleton()->unregister_singleton("PhysicsServer4D");
 			memdelete(obj);
 		}
-		if (Engine::get_singleton()->has_singleton("Slicer4D")) {
-			Object *obj = Engine::get_singleton()->get_singleton("Slicer4D");
-			Engine::get_singleton()->unregister_singleton("Slicer4D");
+		if (Engine::get_singleton()->has_singleton("VisualServer4D")) {
+			Object *obj = Engine::get_singleton()->get_singleton("VisualServer4D");
+			Engine::get_singleton()->unregister_singleton("VisualServer4D");
 			memdelete(obj);
 		}
 	}

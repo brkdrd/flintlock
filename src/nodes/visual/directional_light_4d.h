@@ -1,6 +1,5 @@
 #pragma once
 #include "light_4d.h"
-#include <godot_cpp/classes/directional_light3d.hpp>
 
 using namespace godot;
 
@@ -12,9 +11,9 @@ class DirectionalLight4D : public Light4D {
 	real_t _directional_shadow_pancake_size = 20.0f;
 
 protected:
-	Light3D *_create_light_node() override;
-	void _project_light() override;
+	int _get_light_type() const override { return 0; } // directional
 	static void _bind_methods();
+	void _notification(int p_what);
 
 public:
 	real_t get_directional_shadow_max_distance() const { return _directional_shadow_max_distance; }

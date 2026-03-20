@@ -24,7 +24,7 @@ public:
 	void set_surface_material(int p_surface, const Ref<Material4D> &p_material);
 	int get_surface_material_count() const;
 
-	// Override from VisualInstance4D - provides mesh data to Slicer4D
+	// Override from VisualInstance4D - provides mesh data
 	Ref<Mesh4D> get_mesh_4d() const override { return _mesh; }
 
 private:

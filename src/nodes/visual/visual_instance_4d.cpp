@@ -1,26 +1,8 @@
 #include "visual_instance_4d.h"
-#include "../../slicer/slicer_4d.h"
+#include "../../servers/visual/visual_server_4d.h"
 #include "../../resources/material_4d.h"
-#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/world3d.hpp>
 #include <godot_cpp/classes/viewport.hpp>
-#include <cstring>
-
-// Pack a 4D normal (components in [-1,1]) into a single uint32 using 8-bit
-// quantization, then bitcast to float for storage in a vertex attribute.
-// Encoding: byte = clamp(floor(component * 127 + 128), 1, 255)
-// Layout: x | (y << 8) | (z << 16) | (w << 24)
-// Zero normal (0,0,0,0) encodes as 0x80808080 and is detected in the shader.
-static float pack_normal_4d_as_float(float nx, float ny, float nz, float nw) {
-	auto to_byte = [](float v) -> uint32_t {
-		int b = (int)(v * 127.0f + 128.0f);
-		return (uint32_t)(b < 1 ? 1 : (b > 255 ? 255 : b));
-	};
-	uint32_t packed = to_byte(nx) | (to_byte(ny) << 8) | (to_byte(nz) << 16) | (to_byte(nw) << 24);
-	float result;
-	memcpy(&result, &packed, sizeof(float));
-	return result;
-}
 
 void VisualInstance4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_layers"), &VisualInstance4D::get_layers);
@@ -37,270 +19,66 @@ void VisualInstance4D::_bind_methods() {
 void VisualInstance4D::_notification(int p_what) {
 	Node4D::_notification(p_what);
 
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs) return;
+
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
-			RenderingServer *rs = RenderingServer::get_singleton();
-			_rs_mesh = rs->mesh_create();
-			_rs_instance = rs->instance_create();
-			rs->instance_set_base(_rs_instance, _rs_mesh);
+			// Create VS4D resources
+			_vs_mesh = vs->mesh_create();
+			_vs_instance = vs->instance_create();
+			vs->instance_set_base(_vs_instance, _vs_mesh);
 
-			// Add to the current world's scenario
+			// Set scenario from viewport
 			Viewport *vp = get_viewport();
 			if (vp) {
 				Ref<World3D> world = vp->find_world_3d();
 				if (world.is_valid()) {
-					rs->instance_set_scenario(_rs_instance, world->get_scenario());
+					vs->instance_set_scenario(_vs_instance, world->get_scenario());
 				}
 			}
 
-			rs->instance_set_layer_mask(_rs_instance, _layers);
+			vs->instance_set_layer_mask(_vs_instance, _layers);
 
-			// Register with slicer (shared material is applied in upload_gpu_mesh)
-			if (Slicer4D::get_singleton()) {
-				Slicer4D::get_singleton()->register_instance(this);
-			}
-
-			// Upload mesh data to GPU
-			upload_gpu_mesh();
-
-			// Do NOT set instance_valid=1.0 here. The shader default is 0.0,
-			// which collapses all vertices to degenerate zero-area triangles
-			// (discarded in the fragment shader). Slicer4D::update_frame()
-			// sets correct camera uniforms FIRST, then iterates all instances
-			// calling update_shader_transforms() which sets instance_valid=1.0.
-			// Setting it eagerly here would render one+ frames with stale
-			// camera globals, producing a phantom clone at the origin.
+			// Upload mesh data
+			upload_mesh();
 			apply_material_params();
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {
-			// Unregister from Slicer4D
-			if (Slicer4D::get_singleton()) {
-				Slicer4D::get_singleton()->unregister_instance(this);
+			if (_vs_instance.is_valid()) {
+				vs->free_rid(_vs_instance);
+				_vs_instance = RID();
 			}
-
-			// Free RenderingServer resources
-			RenderingServer *rs = RenderingServer::get_singleton();
-			if (_rs_instance.is_valid()) {
-				rs->free_rid(_rs_instance);
-				_rs_instance = RID();
+			if (_vs_mesh.is_valid()) {
+				vs->free_rid(_vs_mesh);
+				_vs_mesh = RID();
 			}
-			if (_rs_mesh.is_valid()) {
-				rs->free_rid(_rs_mesh);
-				_rs_mesh = RID();
-			}
-			_gpu_mesh_uploaded = false;
 		} break;
 
 		case NOTIFICATION_VISIBILITY_4D_CHANGED: {
-			if (_rs_instance.is_valid()) {
-				RenderingServer::get_singleton()->instance_set_visible(_rs_instance, is_visible_in_tree());
+			if (_vs_instance.is_valid()) {
+				vs->instance_set_visible(_vs_instance, is_visible_in_tree());
 			}
 		} break;
 	}
 }
 
 void VisualInstance4D::_on_transform_4d_changed() {
-	// GPU slicer handles transforms via per-instance shader uniforms.
-	// No need to mark dirty — update_shader_transforms() is called each frame
-	// by Slicer4D::update_frame().
+	update_transform();
 }
 
-// ============================================================
-// upload_gpu_mesh — Pack Mesh4D tetrahedra into GPU vertex format
-//
-// Each tetrahedron (4 vertices in 4D) becomes 6 GPU vertices
-// (2 triangles). All 4 tet vertices + packed normals are stored
-// in every GPU vertex across VERTEX, CUSTOM0-3, and UV.
-//
-// Positions:
-//   VERTEX  (vec3)  = va.xyz
-//   CUSTOM0 (vec4)  = (va.w, vb.x, vb.y, vb.z)
-//   CUSTOM1 (vec4)  = (vb.w, vc.x, vc.y, vc.z)
-//   CUSTOM2 (vec4)  = (vc.w, vd.x, vd.y, vd.z)
-//   CUSTOM3 (vec4)  = (vd.w, vertex_id, packed_na, packed_nb)
-//
-// Normals (8-bit quantized, 4D normal → uint32 → bitcast float):
-//   CUSTOM3.z       = packed normal A (bitcast float)
-//   CUSTOM3.w       = packed normal B (bitcast float)
-//   UV.x            = packed normal C (bitcast float)
-//   UV.y            = packed normal D (bitcast float)
-// ============================================================
-void VisualInstance4D::upload_gpu_mesh() {
-	if (!_rs_mesh.is_valid()) return;
-
-	RenderingServer *rs = RenderingServer::get_singleton();
-	rs->mesh_clear(_rs_mesh);
+void VisualInstance4D::upload_mesh() {
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs || !_vs_mesh.is_valid()) return;
 
 	Ref<Mesh4D> mesh = get_mesh_4d();
-	if (mesh.is_null() || mesh->get_surface_count() == 0) {
-		_gpu_mesh_uploaded = false;
-		return;
-	}
-
-	if (!Slicer4D::get_singleton()) return;
-	RID shared_material = Slicer4D::get_singleton()->get_material_rid();
-
-	// Accumulate all tetrahedra from all surfaces
-	PackedVector3Array gpu_verts;
-	PackedVector2Array gpu_uvs;
-	PackedFloat32Array gpu_custom0, gpu_custom1, gpu_custom2, gpu_custom3;
-	PackedInt32Array gpu_indices;
-
-	int gpu_vert_offset = 0;
-
-	for (int surf = 0; surf < mesh->get_surface_count(); surf++) {
-		Array arrays = mesh->get_surface_arrays(surf);
-		if (arrays.size() < Mesh4D::ARRAY_MAX) continue;
-
-		PackedFloat32Array verts4d = arrays[Mesh4D::ARRAY_VERTEX];
-		PackedInt32Array indices4d = arrays[Mesh4D::ARRAY_INDEX];
-
-		if (verts4d.is_empty() || indices4d.is_empty()) continue;
-
-		// Read normals (4 floats per vertex, may be empty)
-		PackedFloat32Array normals4d;
-		if (arrays[Mesh4D::ARRAY_NORMAL].get_type() == Variant::PACKED_FLOAT32_ARRAY) {
-			normals4d = arrays[Mesh4D::ARRAY_NORMAL];
-		}
-		bool has_normals = (normals4d.size() >= verts4d.size());
-
-		int tet_count = indices4d.size() / 4;
-
-		// Pre-allocate (6 GPU verts per tet)
-		int new_verts = tet_count * 6;
-		int base = gpu_verts.size();
-		gpu_verts.resize(base + new_verts);
-		gpu_uvs.resize(base + new_verts);
-		gpu_custom0.resize((base + new_verts) * 4);
-		gpu_custom1.resize((base + new_verts) * 4);
-		gpu_custom2.resize((base + new_verts) * 4);
-		gpu_custom3.resize((base + new_verts) * 4);
-
-		for (int t = 0; t < tet_count; t++) {
-			int i0 = indices4d[t * 4 + 0];
-			int i1 = indices4d[t * 4 + 1];
-			int i2 = indices4d[t * 4 + 2];
-			int i3 = indices4d[t * 4 + 3];
-
-			// Read the 4 tetrahedron vertices (each 4 floats: x,y,z,w)
-			float va[4], vb[4], vc[4], vd[4];
-			for (int k = 0; k < 4; k++) {
-				va[k] = verts4d[i0 * 4 + k];
-				vb[k] = verts4d[i1 * 4 + k];
-				vc[k] = verts4d[i2 * 4 + k];
-				vd[k] = verts4d[i3 * 4 + k];
-			}
-
-			// Pack 4D normals into uint32 (8-bit quantized), bitcast to float
-			float na[4] = {0,0,0,0}, nb[4] = {0,0,0,0};
-			float nc[4] = {0,0,0,0}, nd[4] = {0,0,0,0};
-			if (has_normals) {
-				for (int k = 0; k < 4; k++) {
-					na[k] = normals4d[i0 * 4 + k];
-					nb[k] = normals4d[i1 * 4 + k];
-					nc[k] = normals4d[i2 * 4 + k];
-					nd[k] = normals4d[i3 * 4 + k];
-				}
-			}
-			float packed_na = pack_normal_4d_as_float(na[0], na[1], na[2], na[3]);
-			float packed_nb = pack_normal_4d_as_float(nb[0], nb[1], nb[2], nb[3]);
-			float packed_nc = pack_normal_4d_as_float(nc[0], nc[1], nc[2], nc[3]);
-			float packed_nd = pack_normal_4d_as_float(nd[0], nd[1], nd[2], nd[3]);
-
-			// Write 6 GPU vertices for this tetrahedron
-			for (int v = 0; v < 6; v++) {
-				int gi = base + t * 6 + v;
-				int c0 = gi * 4;
-
-				gpu_verts[gi] = Vector3(va[0], va[1], va[2]);
-
-				gpu_custom0[c0 + 0] = va[3];
-				gpu_custom0[c0 + 1] = vb[0];
-				gpu_custom0[c0 + 2] = vb[1];
-				gpu_custom0[c0 + 3] = vb[2];
-
-				gpu_custom1[c0 + 0] = vb[3];
-				gpu_custom1[c0 + 1] = vc[0];
-				gpu_custom1[c0 + 2] = vc[1];
-				gpu_custom1[c0 + 3] = vc[2];
-
-				gpu_custom2[c0 + 0] = vc[3];
-				gpu_custom2[c0 + 1] = vd[0];
-				gpu_custom2[c0 + 2] = vd[1];
-				gpu_custom2[c0 + 3] = vd[2];
-
-				gpu_custom3[c0 + 0] = vd[3];
-				gpu_custom3[c0 + 1] = (float)v;
-				gpu_custom3[c0 + 2] = packed_na;
-				gpu_custom3[c0 + 3] = packed_nb;
-
-				gpu_uvs[gi] = Vector2(packed_nc, packed_nd);
-			}
-
-			// Indices: two triangles per tet — (0,1,2) and (3,4,5)
-			int vi_base = gpu_vert_offset + t * 6;
-			gpu_indices.push_back(vi_base + 0);
-			gpu_indices.push_back(vi_base + 1);
-			gpu_indices.push_back(vi_base + 2);
-			gpu_indices.push_back(vi_base + 3);
-			gpu_indices.push_back(vi_base + 4);
-			gpu_indices.push_back(vi_base + 5);
-		}
-
-		gpu_vert_offset += new_verts;
-	}
-
-	if (gpu_verts.is_empty()) {
-		_gpu_mesh_uploaded = false;
-		return;
-	}
-
-	// Build surface arrays — positions + custom channels + UV (packed normals)
-	Array arrays;
-	arrays.resize(RenderingServer::ARRAY_MAX);
-	arrays[RenderingServer::ARRAY_VERTEX] = gpu_verts;
-	arrays[RenderingServer::ARRAY_TEX_UV] = gpu_uvs;
-	arrays[RenderingServer::ARRAY_CUSTOM0] = gpu_custom0;
-	arrays[RenderingServer::ARRAY_CUSTOM1] = gpu_custom1;
-	arrays[RenderingServer::ARRAY_CUSTOM2] = gpu_custom2;
-	arrays[RenderingServer::ARRAY_CUSTOM3] = gpu_custom3;
-	arrays[RenderingServer::ARRAY_INDEX] = gpu_indices;
-
-	uint64_t fmt = (uint64_t)RenderingServer::ARRAY_FORMAT_VERTEX
-		| (uint64_t)RenderingServer::ARRAY_FORMAT_TEX_UV
-		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM0
-		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM1
-		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM2
-		| (uint64_t)RenderingServer::ARRAY_FORMAT_CUSTOM3
-		| ((uint64_t)RenderingServer::ARRAY_CUSTOM_RGBA_FLOAT << RenderingServer::ARRAY_FORMAT_CUSTOM0_SHIFT)
-		| ((uint64_t)RenderingServer::ARRAY_CUSTOM_RGBA_FLOAT << RenderingServer::ARRAY_FORMAT_CUSTOM1_SHIFT)
-		| ((uint64_t)RenderingServer::ARRAY_CUSTOM_RGBA_FLOAT << RenderingServer::ARRAY_FORMAT_CUSTOM2_SHIFT)
-		| ((uint64_t)RenderingServer::ARRAY_CUSTOM_RGBA_FLOAT << RenderingServer::ARRAY_FORMAT_CUSTOM3_SHIFT);
-
-	rs->mesh_add_surface_from_arrays(_rs_mesh, RenderingServer::PRIMITIVE_TRIANGLES, arrays,
-		Array(), Dictionary(), (BitField<RenderingServer::ArrayFormat>)fmt);
-
-	// Apply the shared slicer material
-	rs->mesh_surface_set_material(_rs_mesh, 0, shared_material);
-
-	// AABB must be large enough that frustum culling never clips our
-	// shader-moved vertices, but small enough for usable shadow maps.
-	rs->mesh_set_custom_aabb(_rs_mesh, AABB(Vector3(-250, -250, -250), Vector3(500, 500, 500)));
-
-	// Identity transform — vertex shader handles positioning
-	rs->instance_set_transform(_rs_instance, Transform3D());
-
-	_gpu_mesh_uploaded = true;
+	vs->mesh_set_data(_vs_mesh, mesh);
 }
 
-// ============================================================
-// update_shader_transforms — sets per-instance 4D model matrix
-// ============================================================
-void VisualInstance4D::update_shader_transforms() {
-	if (!_rs_instance.is_valid() || !_gpu_mesh_uploaded) return;
-
-	RenderingServer *rs = RenderingServer::get_singleton();
+void VisualInstance4D::update_transform() {
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs || !_vs_instance.is_valid()) return;
 
 	Ref<Transform4D> gt = get_global_transform_4d();
 	if (gt.is_null()) return;
@@ -308,43 +86,32 @@ void VisualInstance4D::update_shader_transforms() {
 	Ref<Vector4D> origin = gt->get_origin();
 	if (basis.is_null() || origin.is_null()) return;
 
-	// Pack 4x4 basis as 4 vec4 columns
-	Vector4 col0(basis->data[0][0], basis->data[0][1], basis->data[0][2], basis->data[0][3]);
-	Vector4 col1(basis->data[1][0], basis->data[1][1], basis->data[1][2], basis->data[1][3]);
-	Vector4 col2(basis->data[2][0], basis->data[2][1], basis->data[2][2], basis->data[2][3]);
-	Vector4 col3(basis->data[3][0], basis->data[3][1], basis->data[3][2], basis->data[3][3]);
-	Vector4 model_origin(origin->x, origin->y, origin->z, origin->w);
+	PackedFloat32Array basis_cols;
+	basis_cols.resize(16);
+	for (int col = 0; col < 4; col++) {
+		basis_cols[col * 4 + 0] = basis->data[col][0];
+		basis_cols[col * 4 + 1] = basis->data[col][1];
+		basis_cols[col * 4 + 2] = basis->data[col][2];
+		basis_cols[col * 4 + 3] = basis->data[col][3];
+	}
 
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col0", col0);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col1", col1);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col2", col2);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_col3", col3);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "model_4d_origin", model_origin);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "instance_valid", 1.0f);
+	Vector4 orig(origin->x, origin->y, origin->z, origin->w);
+	vs->instance_set_transform_4d(_vs_instance, basis_cols, orig);
 }
 
-// ============================================================
-// apply_material_params — sets per-instance material properties
-// ============================================================
 void VisualInstance4D::apply_material_params() {
-	if (!_rs_instance.is_valid()) return;
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (!vs || !_vs_instance.is_valid()) return;
 
-	RenderingServer *rs = RenderingServer::get_singleton();
-
-	// Default values
-	Color albedo(1.0f, 1.0f, 1.0f, 1.0f);
-	float roughness = 1.0f;
-	float metallic = 0.0f;
-
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "albedo_color", albedo);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "roughness_value", roughness);
-	rs->instance_geometry_set_shader_parameter(_rs_instance, "metallic_value", metallic);
+	vs->instance_set_material_params(_vs_instance,
+		Color(1.0f, 1.0f, 1.0f, 1.0f), 1.0f, 0.0f);
 }
 
 void VisualInstance4D::set_layers(uint32_t p_layers) {
 	_layers = p_layers;
-	if (_rs_instance.is_valid()) {
-		RenderingServer::get_singleton()->instance_set_layer_mask(_rs_instance, _layers);
+	VisualServer4D *vs = VisualServer4D::get_singleton();
+	if (vs && _vs_instance.is_valid()) {
+		vs->instance_set_layer_mask(_vs_instance, _layers);
 	}
 }
 

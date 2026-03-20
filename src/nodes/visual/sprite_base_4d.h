@@ -8,7 +8,7 @@
 using namespace godot;
 
 // SpriteBase4D - base for 4D sprite nodes.
-// Creates a thin slab mesh in 4D space that can be sliced by Slicer4D.
+// Creates a thin slab mesh in 4D space that can be sliced by VisualServer4D.
 // The sprite lies flat in the hyperplane orthogonal to _axis.
 // axis=0: YZW plane (sprite faces X)
 // axis=1: XZW plane (sprite faces Y)

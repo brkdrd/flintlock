@@ -1,5 +1,4 @@
 #include "mesh_instance_4d.h"
-#include "../../slicer/slicer_4d.h"
 
 void MeshInstance4D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_mesh"), &MeshInstance4D::get_mesh);
@@ -17,31 +16,25 @@ void MeshInstance4D::_notification(int p_what) {
 	GeometryInstance4D::_notification(p_what);
 
 	if (p_what == NOTIFICATION_ENTER_TREE) {
-		// Parent already creates RIDs and calls upload_gpu_mesh().
-		// Apply material params for this instance.
 		apply_material_params();
 	}
 }
 
 void MeshInstance4D::set_mesh(const Ref<Mesh4D> &p_mesh) {
 	if (_mesh == p_mesh) return;
-	// Disconnect from old mesh's changed signal
 	if (_mesh.is_valid() && _mesh->is_connected("changed", Callable(this, "_on_mesh_changed"))) {
 		_mesh->disconnect("changed", Callable(this, "_on_mesh_changed"));
 	}
 	_mesh = p_mesh;
-	// Connect to new mesh's changed signal and resize materials
 	if (_mesh.is_valid()) {
 		_mesh->connect("changed", Callable(this, "_on_mesh_changed"));
 		_surface_materials.resize(_mesh->get_surface_count());
 	}
-	// Re-upload mesh data to GPU
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 void MeshInstance4D::_on_mesh_changed() {
-	// Mesh resource properties changed (e.g. radius) — re-upload to GPU
-	upload_gpu_mesh();
+	upload_mesh();
 }
 
 Ref<Material4D> MeshInstance4D::get_surface_material(int p_surface) const {
