@@ -95,10 +95,11 @@ void Light4D::_notification(int p_what) {
 			}
 		} break;
 
-		case NOTIFICATION_TRANSFORM_4D_CHANGED: {
-			_update_light_transform();
-		} break;
 	}
+}
+
+void Light4D::_on_transform_4d_changed() {
+	_update_light_transform();
 }
 
 void Light4D::_update_light_transform() {

@@ -40,9 +40,10 @@ void VisualInstance4D::_notification(int p_what) {
 
 			vs->instance_set_layer_mask(_vs_instance, _layers);
 
-			// Upload mesh data
+			// Upload mesh data and initial transform
 			upload_mesh();
 			apply_material_params();
+			update_transform();
 		} break;
 
 		case NOTIFICATION_EXIT_TREE: {

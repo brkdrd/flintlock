@@ -38,6 +38,9 @@ protected:
 	// Push 4D transform to VS4D
 	void _update_light_transform();
 
+	// Override to propagate transform changes to VS4D
+	virtual void _on_transform_4d_changed() override;
+
 	static void _bind_methods();
 	void _notification(int p_what);
 
