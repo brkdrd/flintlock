@@ -1,4 +1,5 @@
 #include "ray_cast_4d.h"
+#include "collision_object_4d.h"
 #include "../servers/physics/physics_server_4d.h"
 #include "../servers/physics/physics_direct_space_state_4d.h"
 #include <godot_cpp/core/class_db.hpp>
@@ -94,16 +95,29 @@ void RayCast4D::force_raycast_update() {
 }
 
 void RayCast4D::add_exception(Object *p_obj) {
-	if (!p_obj) {
-		return;
+	if (!p_obj) return;
+	CollisionObject4D *co = Object::cast_to<CollisionObject4D>(p_obj);
+	if (co) {
+		RID rid = co->get_rid();
+		if (rid.is_valid()) {
+			_exclude_rids.push_back(rid);
+		}
 	}
-	// Store as RID if the object has one; use the object's instance ID otherwise
-	// For simplicity we store a placeholder RID
-	// A full implementation would cast to CollisionObject4D and get its body RID
 }
 
 void RayCast4D::remove_exception(Object *p_obj) {
-	// Matching remove; see add_exception note above
+	if (!p_obj) return;
+	CollisionObject4D *co = Object::cast_to<CollisionObject4D>(p_obj);
+	if (co) {
+		RID rid = co->get_rid();
+		for (int i = 0; i < _exclude_rids.size(); i++) {
+			RID r = _exclude_rids[i];
+			if (r == rid) {
+				_exclude_rids.remove_at(i);
+				break;
+			}
+		}
+	}
 }
 
 void RayCast4D::clear_exceptions() {
@@ -120,28 +134,23 @@ void RayCast4D::_perform_raycast() {
 	_collision_normal = Vector4();
 
 	PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
-	if (!ps) {
-		return;
-	}
+	if (!ps) return;
+
+	// Get the default space's direct state
+	RID default_space = ps->get_default_space();
+	Ref<PhysicsDirectSpaceState4D> space_state = ps->space_get_direct_state(default_space);
+	if (!space_state.is_valid()) return;
 
 	// Determine the world-space from/to positions using the Node4D transform
 	Ref<Transform4D> global_xform = get_global_transform_4d();
-	if (!global_xform.is_valid()) {
-		return;
-	}
+	if (!global_xform.is_valid()) return;
 
 	// Ray origin is our global position
-	// Get origin as a plain Vector4 for the query
 	Ref<Vector4D> origin_ref = global_xform->get_origin();
-	if (!origin_ref.is_valid()) {
-		return;
-	}
+	if (!origin_ref.is_valid()) return;
 	Vector4 from = Vector4(origin_ref->x, origin_ref->y, origin_ref->z, origin_ref->w);
 
 	// Target is _target_position transformed into world space
-	// For a local-space target we transform it by the global basis
-	// Simple approach: from + global_basis * target_position
-	// Since we don't have a direct matrix-vector product here, use xform
 	Ref<Vector4D> target_local;
 	target_local.instantiate();
 	target_local->x = _target_position.x;
@@ -149,36 +158,33 @@ void RayCast4D::_perform_raycast() {
 	target_local->z = _target_position.z;
 	target_local->w = _target_position.w;
 
-	Ref<Vector4D> target_world_ref = get_global_transform_4d()->xform(target_local);
+	Ref<Vector4D> target_world_ref = global_xform->xform(target_local);
 	Vector4 to = Vector4(target_world_ref->x, target_world_ref->y, target_world_ref->z, target_world_ref->w);
 
-	// We need a direct space state. The server stores spaces; we'd need a space RID
-	// from our parent physics world. For now we iterate active spaces through the server
-	// by getting the direct state of the first active space found.
-	// A full implementation would resolve the space via the scene tree's physics world.
-	Ref<PhysicsDirectSpaceState4D> space_state;
-
-	// Access the server's space map via the singleton
-	// Since we don't have a public API to enumerate spaces, we create a placeholder.
-	// In a real integration the world node would provide the space RID.
-
-	if (!space_state.is_valid()) {
-		return;
+	// Build exclude list - add parent if needed
+	TypedArray<RID> exclude = _exclude_rids.duplicate();
+	if (_exclude_parent) {
+		Node *parent = get_parent();
+		if (parent) {
+			CollisionObject4D *co = Object::cast_to<CollisionObject4D>(parent);
+			if (co) {
+				RID parent_rid = co->get_rid();
+				if (parent_rid.is_valid()) {
+					exclude.push_back(parent_rid);
+				}
+			}
+		}
 	}
 
 	Dictionary result = space_state->intersect_ray(
-		from,
-		to,
-		_exclude_rids,
+		from, to, exclude,
 		_collision_mask,
 		_collide_with_bodies,
 		_collide_with_areas,
 		_hit_from_inside
 	);
 
-	if (result.is_empty()) {
-		return;
-	}
+	if (result.is_empty()) return;
 
 	_is_colliding = true;
 

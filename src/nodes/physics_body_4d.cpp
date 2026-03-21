@@ -1,4 +1,7 @@
 #include "physics_body_4d.h"
+#include "../servers/physics/physics_server_4d.h"
+#include "../servers/physics/core/space_4d_internal.h"
+#include "../servers/physics/core/rigid_body_4d_internal.h"
 #include <godot_cpp/core/class_db.hpp>
 
 using namespace godot;
@@ -121,11 +124,54 @@ bool PhysicsBody4D::get_axis_lock_angular_zw() const { return _axis_lock_angular
 // ---------------------------------------------------------------------------
 
 Variant PhysicsBody4D::move_and_collide(const Vector4 &p_motion) {
-	return Variant();
+	PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
+	if (!ps || !_rid.is_valid()) return Variant();
+
+	RID space_rid = ps->body_get_space(_rid);
+	Space4DInternal *space = ps->get_space_internal(space_rid);
+	RigidBody4DInternal *body = ps->get_body_internal(_rid);
+	if (!space || !body) return Variant();
+
+	Space4DInternal::MotionResult result = space->test_body_motion(body->id, p_motion, 0.08f);
+
+	if (result.colliding) {
+		// Move by the safe travel distance
+		Ref<Vector4D> travel = Vector4D::create(
+			result.travel.x, result.travel.y, result.travel.z, result.travel.w
+		);
+		translate(travel);
+		PackedFloat32Array xf = _get_transform_array();
+		ps->body_set_state(_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, xf);
+
+		// Return collision info as dictionary
+		Dictionary collision;
+		collision["travel"] = result.travel;
+		collision["remainder"] = result.remainder;
+		collision["position"] = result.collision_point;
+		collision["normal"] = result.collision_normal;
+		collision["depth"] = result.collision_depth;
+		return collision;
+	} else {
+		// No collision - move the full distance
+		Ref<Vector4D> offset = Vector4D::create(p_motion.x, p_motion.y, p_motion.z, p_motion.w);
+		translate(offset);
+		PackedFloat32Array xf = _get_transform_array();
+		ps->body_set_state(_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, xf);
+		return Variant();
+	}
 }
 
 bool PhysicsBody4D::test_move(const Vector4 &p_motion) {
-	return false;
+	PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
+	if (!ps || !_rid.is_valid()) return false;
+
+	RID space_rid = ps->body_get_space(_rid);
+	Space4DInternal *space = ps->get_space_internal(space_rid);
+	RigidBody4DInternal *body = ps->get_body_internal(_rid);
+	if (!space || !body) return false;
+
+	Space4DInternal::MotionResult result = space->test_body_motion(body->id, p_motion, 0.08f);
+	return result.colliding;
 }
 
 // ---------------------------------------------------------------------------

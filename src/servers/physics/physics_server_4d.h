@@ -1,5 +1,6 @@
 #pragma once
 #include <cstring>
+#include <memory>
 #include <godot_cpp/classes/object.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/rid.hpp>
@@ -8,25 +9,23 @@
 #include <godot_cpp/templates/vector.hpp>
 #include "physics_direct_body_state_4d.h"
 #include "physics_direct_space_state_4d.h"
+#include "core/space_4d_internal.h"
 
 using namespace godot;
 
-// ============================================================
+// ============================================================================
 // PhysicsServer4D
 //
-// Independent 4D physics server. NOT a replacement for PhysicsServer3D.
-// Registered as a singleton named "PhysicsServer4D".
-//
-// This is a functional stub with the correct Godot-facing API.
-// A full implementation would fork Jolt Physics to 4D (Stage 5 of spec).
-// ============================================================
+// Full 4D physics server with GJK/EPA collision detection, sequential impulse
+// constraint solver, dynamic BVH broadphase, and joint constraints.
+// All algorithms are native 4D generalizations of Jolt Physics patterns.
+// ============================================================================
 class PhysicsServer4D : public Object {
 	GDCLASS(PhysicsServer4D, Object);
 
 	static PhysicsServer4D *singleton;
 
 public:
-	// Body types (analog of PhysicsServer3D::BodyMode)
 	enum BodyMode {
 		BODY_MODE_STATIC,
 		BODY_MODE_KINEMATIC,
@@ -34,7 +33,6 @@ public:
 		BODY_MODE_RIGID_LINEAR,
 	};
 
-	// Body parameters (analog of PhysicsServer3D::BodyParameter)
 	enum BodyParam {
 		BODY_PARAM_BOUNCE,
 		BODY_PARAM_FRICTION,
@@ -49,7 +47,6 @@ public:
 		BODY_PARAM_MAX,
 	};
 
-	// Body state
 	enum BodyState {
 		BODY_STATE_TRANSFORM,
 		BODY_STATE_LINEAR_VELOCITY,
@@ -82,77 +79,58 @@ public:
 		SPACE_PARAM_SOLVER_ITERATIONS,
 	};
 
+	// Joint types exposed to GDScript
+	enum JointType {
+		JOINT_TYPE_PIN,
+		JOINT_TYPE_HINGE,
+		JOINT_TYPE_SLIDER,
+		JOINT_TYPE_CONE_TWIST,
+		JOINT_TYPE_GENERIC_10DOF,
+	};
+
 protected:
 	static void _bind_methods();
 
-	// Internal body data
-	struct BodyData {
-		BodyMode mode = BODY_MODE_STATIC;
-		PackedFloat32Array transform; // 20 floats: 4x4 basis + 4 origin
-		Vector4 linear_velocity;
-		PackedFloat32Array angular_velocity; // 6 floats bivector
-		real_t mass = 1.0f;
-		real_t friction = 0.6f;
-		real_t bounce = 0.0f;
-		real_t gravity_scale = 1.0f;
-		real_t linear_damp = 0.0f;
-		real_t angular_damp = 0.0f;
-		bool sleeping = false;
-		bool can_sleep = true;
-		RID space;
-		uint64_t object_instance_id;
-		Callable state_sync_callback;
-		Vector<RID> shapes;
+	// ---- Internal storage ----
+	// Maps RID -> internal ID for each resource type
+	struct RIDData {
+		enum Type { BODY, AREA, SPACE, SHAPE, JOINT };
+		Type type;
+		int internal_id;     // Index into the internal arrays
+		RID space_rid;       // Which space this belongs to (for bodies/areas)
 	};
 
-	struct AreaData {
-		PackedFloat32Array transform;
-		real_t gravity = 9.8f;
-		Vector4 gravity_vector = Vector4(0, -1, 0, 0);
-		bool gravity_is_point = false;
-		int gravity_override_mode = 0;
-		real_t linear_damp = 0.0f;
-		real_t angular_damp = 0.0f;
-		int priority = 0;
-		bool monitoring = true;
-		bool monitorable = true;
-		RID space;
-		Callable body_monitor_callback;
-		Callable area_monitor_callback;
-		Vector<RID> shapes;
-	};
-
-	struct SpaceData {
-		Vector4 gravity_direction = Vector4(0, -1, 0, 0);
-		real_t gravity_magnitude = 9.8f;
-		Vector<RID> bodies;
-		Vector<RID> areas;
-		Ref<PhysicsDirectSpaceState4D> direct_state;
-	};
-
-	struct ShapeData {
-		int type = 0; // 0=box,1=sphere,2=capsule,3=cylinder,4=convex,5=concave,6=plane,7=ray
-		PackedFloat32Array data;
-	};
-
-	HashMap<RID, BodyData> _bodies;
-	HashMap<RID, AreaData> _areas;
-	HashMap<RID, SpaceData> _spaces;
-	HashMap<RID, ShapeData> _shapes;
+	HashMap<RID, RIDData> _rid_map;
+	HashMap<RID, std::shared_ptr<Shape4DInternal>> _shapes;
+	HashMap<RID, std::shared_ptr<Space4DInternal>> _spaces;
 	Vector<RID> _active_spaces;
+
+	// Direct state objects (one per space)
+	HashMap<RID, Ref<PhysicsDirectSpaceState4D>> _space_direct_states;
 
 	uint64_t _rid_counter = 1;
 	RID _make_rid() {
 		uint64_t id = _rid_counter++;
 		RID rid;
-		// RID is 8 bytes of opaque data; write our counter into it directly.
-		// get_id() will then return this value, making HashMap hashing work correctly.
 		memcpy(rid._native_ptr(), &id, sizeof(uint64_t));
 		return rid;
 	}
 
-	void _step_space(RID p_space, real_t p_delta);
-	Vector4 _compute_gravity(RID p_space, RID p_body);
+	// Default space (lazily created when first body/area needs one)
+	RID _default_space;
+
+	// Helpers
+	RigidBody4DInternal *_get_body(RID p_rid);
+	const RigidBody4DInternal *_get_body(RID p_rid) const;
+	Area4DInternal *_get_area(RID p_rid);
+	Space4DInternal *_get_space(RID p_rid);
+	const Space4DInternal *_get_space(RID p_rid) const;
+
+	void _step_space(RID p_space_rid, real_t p_delta);
+	void _fire_body_callbacks(Space4DInternal &space);
+
+	// Create internal shape from server shape data
+	std::shared_ptr<Shape4DInternal> _create_internal_shape(int p_type, const PackedFloat32Array &p_data);
 
 public:
 	static PhysicsServer4D *get_singleton();
@@ -203,6 +181,9 @@ public:
 	void body_set_axis_lock(RID p_body, int p_axis, bool p_lock);
 	bool body_is_axis_locked(RID p_body, int p_axis) const;
 
+	void body_set_collision_layer(RID p_body, uint32_t p_layer);
+	void body_set_collision_mask(RID p_body, uint32_t p_mask);
+
 	// ---- Area API ----
 	RID area_create();
 	void area_set_space(RID p_area, RID p_space);
@@ -225,11 +206,24 @@ public:
 	void shape_set_data(RID p_shape, const PackedFloat32Array &p_data);
 	PackedFloat32Array shape_get_data(RID p_shape) const;
 
+	// ---- Joint API ----
+	RID joint_create(JointType p_type, RID p_body_a, RID p_body_b);
+	void joint_set_param(RID p_joint, const String &p_param, const Variant &p_value);
+	void joint_set_anchor_a(RID p_joint, const Vector4 &p_anchor);
+	void joint_set_anchor_b(RID p_joint, const Vector4 &p_anchor);
+
 	// ---- Step ----
 	void step(real_t p_delta);
 
 	// ---- Free ----
 	void free_rid(RID p_rid);
+
+	// ---- Default space ----
+	RID get_default_space();
+
+	// ---- Internal access (for direct state objects) ----
+	Space4DInternal *get_space_internal(RID p_space);
+	RigidBody4DInternal *get_body_internal(RID p_body);
 };
 
 VARIANT_ENUM_CAST(PhysicsServer4D::BodyMode);
@@ -237,3 +231,4 @@ VARIANT_ENUM_CAST(PhysicsServer4D::BodyParam);
 VARIANT_ENUM_CAST(PhysicsServer4D::BodyState);
 VARIANT_ENUM_CAST(PhysicsServer4D::AreaParam);
 VARIANT_ENUM_CAST(PhysicsServer4D::SpaceParam);
+VARIANT_ENUM_CAST(PhysicsServer4D::JointType);

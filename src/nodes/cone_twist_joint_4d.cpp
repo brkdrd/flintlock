@@ -1,4 +1,5 @@
 #include "cone_twist_joint_4d.h"
+#include "collision_object_4d.h"
 #include "../servers/physics/physics_server_4d.h"
 #include <godot_cpp/core/class_db.hpp>
 
@@ -52,7 +53,52 @@ float ConeTwistJoint4D::get_relaxation() const {
 // ─── Joint Configuration ──────────────────────────────────────────────────────
 
 void ConeTwistJoint4D::_configure_joint() {
-	// Cone-twist joint creation on PhysicsServer4D when joint API is available.
+	NodePath node_a_path = get_node_a();
+	NodePath node_b_path = get_node_b();
+	if (node_a_path.is_empty() || node_b_path.is_empty()) return;
+
+	Node *node_a = get_node_or_null(node_a_path);
+	Node *node_b = get_node_or_null(node_b_path);
+	if (!node_a || !node_b) return;
+
+	CollisionObject4D *co_a = Object::cast_to<CollisionObject4D>(node_a);
+	CollisionObject4D *co_b = Object::cast_to<CollisionObject4D>(node_b);
+	if (!co_a || !co_b) return;
+
+	RID body_a = co_a->get_rid();
+	RID body_b = co_b->get_rid();
+	if (!body_a.is_valid() || !body_b.is_valid()) return;
+
+	PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
+	if (!ps) return;
+
+	_joint_rid = ps->joint_create(PhysicsServer4D::JOINT_TYPE_CONE_TWIST, body_a, body_b);
+
+	if (_joint_rid.is_valid()) {
+		Ref<Transform4D> joint_global = get_global_transform_4d();
+		if (joint_global.is_valid()) {
+			Ref<Vector4D> joint_origin = joint_global->get_origin();
+			if (joint_origin.is_valid()) {
+				Vector4 joint_pos = Vector4(joint_origin->x, joint_origin->y, joint_origin->z, joint_origin->w);
+
+				Ref<Transform4D> a_global = co_a->get_global_transform_4d();
+				if (a_global.is_valid()) {
+					Ref<Vector4D> a_origin = a_global->get_origin();
+					if (a_origin.is_valid()) {
+						ps->joint_set_anchor_a(_joint_rid, joint_pos - Vector4(a_origin->x, a_origin->y, a_origin->z, a_origin->w));
+					}
+				}
+
+				Ref<Transform4D> b_global = co_b->get_global_transform_4d();
+				if (b_global.is_valid()) {
+					Ref<Vector4D> b_origin = b_global->get_origin();
+					if (b_origin.is_valid()) {
+						ps->joint_set_anchor_b(_joint_rid, joint_pos - Vector4(b_origin->x, b_origin->y, b_origin->z, b_origin->w));
+					}
+				}
+			}
+		}
+	}
 }
 
 // ─── Bindings ─────────────────────────────────────────────────────────────────

@@ -1,4 +1,7 @@
 #include "character_body_4d.h"
+#include "../servers/physics/physics_server_4d.h"
+#include "../servers/physics/core/space_4d_internal.h"
+#include "../servers/physics/core/rigid_body_4d_internal.h"
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/classes/engine.hpp>
 
@@ -45,27 +48,106 @@ void CharacterBody4D::set_motion_mode(int p_mode) {
 int CharacterBody4D::get_motion_mode() const { return _motion_mode; }
 
 // ---------------------------------------------------------------------------
-// Movement stub
+// Movement using physics server motion test
 // ---------------------------------------------------------------------------
 
 bool CharacterBody4D::move_and_slide() {
-	// Stub: move by velocity * delta using translate().
-	// A real implementation would cast the shape and slide against colliders.
 	double delta = get_physics_process_delta_time();
 
-	Ref<Vector4D> offset = Vector4D::create(
-		_velocity.x * (float)delta,
-		_velocity.y * (float)delta,
-		_velocity.z * (float)delta,
-		_velocity.w * (float)delta
-	);
-	translate(offset);
-
-	_on_floor   = false;
-	_on_wall    = false;
+	_on_floor = false;
+	_on_wall = false;
 	_on_ceiling = false;
 
-	return false; // no collision detected in stub
+	PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
+	if (!ps || !_rid.is_valid()) {
+		// Fallback: just translate
+		Ref<Vector4D> offset = Vector4D::create(
+			_velocity.x * (float)delta,
+			_velocity.y * (float)delta,
+			_velocity.z * (float)delta,
+			_velocity.w * (float)delta
+		);
+		translate(offset);
+		return false;
+	}
+
+	// Get the space the body belongs to
+	RID space_rid = ps->body_get_space(_rid);
+	Space4DInternal *space = ps->get_space_internal(space_rid);
+	RigidBody4DInternal *body = ps->get_body_internal(_rid);
+
+	if (!space || !body) {
+		Ref<Vector4D> offset = Vector4D::create(
+			_velocity.x * (float)delta,
+			_velocity.y * (float)delta,
+			_velocity.z * (float)delta,
+			_velocity.w * (float)delta
+		);
+		translate(offset);
+		return false;
+	}
+
+	Vector4 motion = _velocity * (float)delta;
+	bool collided = false;
+	float margin = 0.08f;
+
+	for (int slide = 0; slide < _max_slides; slide++) {
+		float motion_len = motion.length();
+		if (motion_len < 1e-6f) break;
+
+		Space4DInternal::MotionResult result = space->test_body_motion(body->id, motion, margin);
+
+		if (!result.colliding) {
+			// Move the full remaining distance
+			Ref<Vector4D> offset = Vector4D::create(motion.x, motion.y, motion.z, motion.w);
+			translate(offset);
+			// Update body transform in server
+			PackedFloat32Array xf = _get_transform_array();
+			ps->body_set_state(_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, xf);
+			break;
+		}
+
+		collided = true;
+
+		// Move to the safe position
+		Ref<Vector4D> travel = Vector4D::create(
+			result.travel.x, result.travel.y, result.travel.z, result.travel.w
+		);
+		translate(travel);
+		// Update body transform in server
+		PackedFloat32Array xf = _get_transform_array();
+		ps->body_set_state(_rid, PhysicsServer4D::BODY_STATE_TRANSFORM, xf);
+
+		// Classify collision
+		Vector4 normal = result.collision_normal;
+		float up_dot = normal.dot(_up_direction);
+
+		if (_motion_mode == MOTION_MODE_GROUNDED) {
+			float floor_cos = Math::cos(_floor_max_angle);
+			if (up_dot > floor_cos) {
+				_on_floor = true;
+			} else if (up_dot < -floor_cos) {
+				_on_ceiling = true;
+			} else {
+				_on_wall = true;
+			}
+		}
+
+		// Slide: remove the component of motion along the collision normal
+		motion = result.remainder;
+		float normal_component = motion.dot(normal);
+		if (normal_component < 0.0f) {
+			motion = motion - normal * normal_component;
+		}
+
+		// Also slide velocity for floors/ceilings
+		float vel_normal = _velocity.dot(normal);
+		if (vel_normal < 0.0f) {
+			_velocity = _velocity - normal * vel_normal;
+		}
+	}
+
+	return collided;
 }
 
 bool CharacterBody4D::is_on_floor()   const { return _on_floor; }

@@ -7,6 +7,8 @@
 using namespace godot;
 
 class PhysicsServer4D;
+struct Space4DInternal;
+struct RigidBody4DInternal;
 
 // PhysicsDirectBodyState4D - provides direct access to a body's state during physics callbacks.
 // Analog of PhysicsDirectBodyState3D.

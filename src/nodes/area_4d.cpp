@@ -32,6 +32,10 @@ void Area4D::_notification(int p_what) {
 			if (_rid.is_valid()) {
 				PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
 				if (ps) {
+					// Assign to the default space
+					RID default_space = ps->get_default_space();
+					ps->area_set_space(_rid, default_space);
+
 					ps->area_set_object_instance_id(_rid, get_instance_id());
 					ps->area_set_monitorable(_rid, _monitorable);
 					ps->area_set_param(_rid, PhysicsServer4D::AREA_PARAM_GRAVITY, _gravity);
@@ -121,17 +125,33 @@ void Area4D::set_priority(int p_priority) {
 int Area4D::get_priority() const { return _priority; }
 
 // ---------------------------------------------------------------------------
-// Monitor callbacks (stubs — emit signals when a real physics backend fires them)
+// Monitor callbacks
 // ---------------------------------------------------------------------------
 
 void Area4D::_body_monitor_callback(int p_status, const RID &p_rid, int p_instance_id, int p_body_shape, int p_area_shape) {
-	// p_status 1 = enter, 0 = exit
-	// A full implementation would resolve the ObjectID to a Node and emit the signal.
-	// Stub: no-op.
+	if (p_instance_id == 0) return;
+
+	Object *obj = ObjectDB::get_instance(ObjectID((uint64_t)p_instance_id));
+	if (!obj) return;
+
+	if (p_status == 1) {
+		emit_signal("body_entered", obj);
+	} else {
+		emit_signal("body_exited", obj);
+	}
 }
 
 void Area4D::_area_monitor_callback(int p_status, const RID &p_rid, int p_instance_id, int p_area_shape, int p_self_shape) {
-	// Stub: no-op.
+	if (p_instance_id == 0) return;
+
+	Object *obj = ObjectDB::get_instance(ObjectID((uint64_t)p_instance_id));
+	if (!obj) return;
+
+	if (p_status == 1) {
+		emit_signal("area_entered", obj);
+	} else {
+		emit_signal("area_exited", obj);
+	}
 }
 
 // ---------------------------------------------------------------------------

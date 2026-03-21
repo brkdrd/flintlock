@@ -49,6 +49,7 @@ sources = collect_sources([
     "src/nodes/collision",
     "src/servers",
     "src/servers/physics",
+    "src/servers/physics/core",
     "src/servers/visual",
     "src/resources",
     "src/editor",

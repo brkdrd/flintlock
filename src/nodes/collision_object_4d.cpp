@@ -72,8 +72,16 @@ void CollisionObject4D::_notification(int p_what) {
 			if (_rid.is_valid()) {
 				PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
 				if (ps) {
+					// Assign to the default space
+					RID default_space = ps->get_default_space();
+					ps->body_set_space(_rid, default_space);
+
 					// Register the instance ID so the server can call back to us.
 					ps->body_set_object_instance_id(_rid, get_instance_id());
+
+					// Set collision layer and mask
+					ps->body_set_collision_layer(_rid, _collision_layer);
+					ps->body_set_collision_mask(_rid, _collision_mask);
 
 					// Push current transform.
 					PackedFloat32Array xf = _get_transform_array();
@@ -117,6 +125,10 @@ void CollisionObject4D::_notification(int p_what) {
 
 void CollisionObject4D::set_collision_layer(uint32_t p_layer) {
 	_collision_layer = p_layer;
+	if (_rid.is_valid()) {
+		PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
+		if (ps) ps->body_set_collision_layer(_rid, p_layer);
+	}
 }
 uint32_t CollisionObject4D::get_collision_layer() const {
 	return _collision_layer;
@@ -124,6 +136,10 @@ uint32_t CollisionObject4D::get_collision_layer() const {
 
 void CollisionObject4D::set_collision_mask(uint32_t p_mask) {
 	_collision_mask = p_mask;
+	if (_rid.is_valid()) {
+		PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
+		if (ps) ps->body_set_collision_mask(_rid, p_mask);
+	}
 }
 uint32_t CollisionObject4D::get_collision_mask() const {
 	return _collision_mask;

@@ -9,6 +9,7 @@
 using namespace godot;
 
 class PhysicsServer4D;
+struct Space4DInternal;
 
 // PhysicsDirectSpaceState4D - direct query interface for a physics space.
 // Analog of PhysicsDirectSpaceState3D.

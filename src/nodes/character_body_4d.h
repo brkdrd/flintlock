@@ -51,7 +51,7 @@ public:
 	void set_motion_mode(int p_mode);
 	int  get_motion_mode() const;
 
-	// Movement — stub: simply translates by velocity * get_physics_process_delta_time()
+	// Movement — uses physics server motion queries to slide along colliders
 	bool move_and_slide();
 
 	bool is_on_floor()   const;
