@@ -14,6 +14,7 @@ protected:
 	Vector4 _constant_linear_velocity;
 
 	virtual void _create_physics_body() override;
+	virtual void _configure_physics_body() override;
 
 	static void _bind_methods();
 

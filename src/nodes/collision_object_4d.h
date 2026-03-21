@@ -21,7 +21,13 @@ protected:
 
 	// Called by subclasses to create the actual physics object (body or area).
 	// Implementations must store the created RID in _rid.
+	// NOTE: Only create the RID here. Do NOT set properties — the body
+	// is not yet in a space, so _get_body() will return nullptr.
 	virtual void _create_physics_body() = 0;
+
+	// Called after the body has been assigned to a space.
+	// Subclasses override this to push mode, mass, callback, etc.
+	virtual void _configure_physics_body() {}
 
 	// Build a 20-float PackedFloat32Array from the current global Transform4D.
 	PackedFloat32Array _get_transform_array() const;

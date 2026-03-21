@@ -72,9 +72,14 @@ void CollisionObject4D::_notification(int p_what) {
 			if (_rid.is_valid()) {
 				PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
 				if (ps) {
-					// Assign to the default space
+					// Assign to the default space — body is now in a space
+					// and _get_body() will work from this point on.
 					RID default_space = ps->get_default_space();
 					ps->body_set_space(_rid, default_space);
+
+					// Let the subclass push mode, mass, callback, etc.
+					// MUST be after body_set_space so the internal body exists.
+					_configure_physics_body();
 
 					// Register the instance ID so the server can call back to us.
 					ps->body_set_object_instance_id(_rid, get_instance_id());

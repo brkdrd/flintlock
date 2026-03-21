@@ -10,8 +10,13 @@ void AnimatableBody4D::_create_physics_body() {
 	PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
 	if (ps) {
 		_rid = ps->body_create();
-		ps->body_set_mode(_rid, PhysicsServer4D::BODY_MODE_KINEMATIC);
 	}
+}
+
+void AnimatableBody4D::_configure_physics_body() {
+	PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
+	if (!ps || !_rid.is_valid()) return;
+	ps->body_set_mode(_rid, PhysicsServer4D::BODY_MODE_KINEMATIC);
 }
 
 void AnimatableBody4D::set_sync_to_physics(bool p_sync) {

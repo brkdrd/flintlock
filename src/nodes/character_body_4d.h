@@ -29,6 +29,7 @@ protected:
 	bool _on_ceiling = false;
 
 	virtual void _create_physics_body() override;
+	virtual void _configure_physics_body() override;
 
 	static void _bind_methods();
 

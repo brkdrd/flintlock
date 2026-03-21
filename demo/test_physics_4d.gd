@@ -2,24 +2,14 @@
 ## 4D Physics test scene: a sphere falls under gravity onto a tilted box.
 ## The box is slightly rotated in the ZW plane so its cross-section appears
 ## as a slope, letting the sphere roll off when collision is implemented.
-##
-## NOTE: PhysicsServer4D currently has gravity integration but no collision
-## detection. The sphere will fall under gravity and pass through the box.
-## This scene is a testbed for developing the physics pipeline.
 
 extends Node
 
 var _sphere: RigidBody4D
 var _box: StaticBody4D
 var _camera: Camera4D
-var _physics_space: RID
 
 func _ready() -> void:
-	# ── Physics space setup ──────────────────────────────────────────────────
-	var ps := PhysicsServer4D
-	_physics_space = ps.space_create()
-	ps.space_set_active(_physics_space, true)
-
 	# ── Scene root ───────────────────────────────────────────────────────────
 	var root := Node4D.new()
 	root.name = "Scene4D"
@@ -55,9 +45,6 @@ func _ready() -> void:
 	sphere_col.shape = sphere_shape
 	_sphere.add_child(sphere_col)
 
-	# Register sphere body with physics space
-	ps.body_set_space(_sphere.get_rid(), _physics_space)
-
 	# ── Floor Box (StaticBody4D) ─────────────────────────────────────────────
 	_box = StaticBody4D.new()
 	_box.name = "FloorBox"
@@ -86,9 +73,6 @@ func _ready() -> void:
 	box_shape.size = Vector4(6.0, 0.5, 6.0, 2.0)
 	box_col.shape = box_shape
 	_box.add_child(box_col)
-
-	# Register box body with physics space
-	ps.body_set_space(_box.get_rid(), _physics_space)
 
 	# ── Lighting ─────────────────────────────────────────────────────────────
 	var light := OmniLight4D.new()

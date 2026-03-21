@@ -305,10 +305,21 @@ void PhysicsServer4D::body_set_space(RID p_body, RID p_space) {
 	auto it = _rid_map.find(p_body);
 	if (it == _rid_map.end() || it->value.type != RIDData::BODY) return;
 
-	// Remove from old space
+	// Capture old body state before removing from old space
+	RigidBody4DInternal old_body;
+	bool has_old_body = false;
 	if (it->value.space_rid.is_valid() && it->value.internal_id >= 0) {
-		// We don't actually remove from internal arrays to avoid index invalidation
-		// Instead mark as inactive (TODO: proper removal with index compaction)
+		auto sp_it = _spaces.find(it->value.space_rid);
+		if (sp_it != _spaces.end()) {
+			int idx = it->value.internal_id;
+			if (idx >= 0 && idx < (int)sp_it->value->bodies.size()) {
+				old_body = sp_it->value->bodies[idx];
+				has_old_body = true;
+				// Mark old body as inactive (static with no callback)
+				sp_it->value->bodies[idx].mode = BODY_MODE_4D_STATIC;
+				sp_it->value->bodies[idx].state_sync_callback = Callable();
+			}
+		}
 	}
 
 	if (!p_space.is_valid() || !_spaces.has(p_space)) {
@@ -319,6 +330,10 @@ void PhysicsServer4D::body_set_space(RID p_body, RID p_space) {
 
 	auto &space = _spaces[p_space];
 	RigidBody4DInternal body;
+	if (has_old_body) {
+		// Transfer all state from old body
+		body = old_body;
+	}
 	body.id = (int)space->bodies.size();
 	space->body_index_map[body.id] = body.id;
 	space->bodies.push_back(body);

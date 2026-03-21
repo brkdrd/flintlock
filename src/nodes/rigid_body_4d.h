@@ -24,6 +24,7 @@ protected:
 	Vector4 _constant_force;
 
 	virtual void _create_physics_body() override;
+	virtual void _configure_physics_body() override;
 
 	void _notification(int p_what);
 	static void _bind_methods();

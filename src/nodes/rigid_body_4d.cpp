@@ -14,10 +14,17 @@ void RigidBody4D::_create_physics_body() {
 	PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
 	if (!ps) return;
 
+	// Only create the RID here. Properties are pushed in _configure_physics_body()
+	// which runs after body_set_space() so _get_body() can find the internal body.
 	_rid = ps->body_create();
-	ps->body_set_mode(_rid, PhysicsServer4D::BODY_MODE_RIGID);
+}
 
-	// Push initial parameters to the server.
+void RigidBody4D::_configure_physics_body() {
+	PhysicsServer4D *ps = PhysicsServer4D::get_singleton();
+	if (!ps || !_rid.is_valid()) return;
+
+	ps->body_set_mode(_rid, _freeze ? PhysicsServer4D::BODY_MODE_STATIC : PhysicsServer4D::BODY_MODE_RIGID);
+
 	ps->body_set_param(_rid, PhysicsServer4D::BODY_PARAM_MASS, _mass);
 	ps->body_set_param(_rid, PhysicsServer4D::BODY_PARAM_GRAVITY_SCALE, _gravity_scale);
 	ps->body_set_param(_rid, PhysicsServer4D::BODY_PARAM_LINEAR_DAMP, _linear_damp);
